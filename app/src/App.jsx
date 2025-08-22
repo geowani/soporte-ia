@@ -1,43 +1,103 @@
-import { useEffect, useState } from "react";
-import { ping, listarCasos } from "./api";
+import { useState } from "react";
+import { login } from "./api";
 
 export default function App() {
-  const [ok, setOk] = useState(false);
-  const [casos, setCasos] = useState([]);
-  const [error, setError] = useState("");
+  const [email, setEmail]       = useState("");
+  const [password, setPassword] = useState("");
+  const [msg, setMsg]           = useState("");
+  const [type, setType]         = useState("info"); // 'success' | 'error' | 'info'
+  const [loading, setLoading]   = useState(false);
 
-  useEffect(() => {
-    ping().then(()=>setOk(true)).catch(e=>setError(e.message));
-  }, []);
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    setMsg("");
+    setType("info");
 
-  const cargar = async () => {
-    setError("");
-    try { setCasos(await listarCasos()); } catch(e){ setError(e.message); }
+    // Validación básica
+    if (!email || !password) {
+      setMsg("Completa correo y contraseña.");
+      setType("error");
+      return;
+    }
+    // Validar formato de email simple
+    const okEmail = /\S+@\S+\.\S+/.test(email);
+    if (!okEmail) {
+      setMsg("Ingresa un correo válido.");
+      setType("error");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const res = await login(email, password);
+      setMsg(res.message || "Inicio de sesión exitoso");
+      setType("success");
+      // Aquí podrías navegar a otra vista (dashboard) cuando integremos routing
+    } catch (e) {
+      setMsg(e.message || "Correo o contraseña inválidos");
+      setType("error");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen p-6 bg-gray-50">
-      <div className="max-w-3xl mx-auto">
-        <h1 className="text-2xl font-bold mb-4">Soporte IA – Demo</h1>
-        <span className={`px-2 py-1 rounded ${ok ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-          Backend: {ok ? 'OK' : 'NO responde'}
-        </span>
+    <div className="min-h-screen bg-gray-50 grid place-items-center p-4">
+      <div className="w-full max-w-sm bg-white rounded-2xl shadow p-6">
+        <h1 className="text-xl font-bold mb-1">Bienvenido</h1>
+        <p className="text-sm text-gray-600 mb-6">Inicia sesión para continuar</p>
 
-        <div className="mt-4">
-          <button onClick={cargar} className="px-4 py-2 rounded bg-black text-white">
-            Cargar casos
+        {msg && (
+          <div
+            className={`mb-4 rounded-lg px-3 py-2 text-sm border ${
+              type === "success"
+                ? "bg-green-50 text-green-700 border-green-200"
+                : type === "error"
+                ? "bg-red-50 text-red-700 border-red-200"
+                : "bg-gray-50 text-gray-700 border-gray-200"
+            }`}
+          >
+            {msg}
+          </div>
+        )}
+
+        <form onSubmit={onSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Correo</label>
+            <input
+              type="email"
+              className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-black/20"
+              placeholder="tucorreo@dominio.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Contraseña</label>
+            <input
+              type="password"
+              className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-black/20"
+              placeholder="••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-xl bg-black text-white py-2 font-medium hover:opacity-90 disabled:opacity-50"
+          >
+            {loading ? "Verificando..." : "Iniciar sesión"}
           </button>
-        </div>
+        </form>
 
-        {error && <p className="mt-3 text-red-600">Error: {error}</p>}
-        <ul className="mt-4 space-y-2">
-          {casos.map((c, i) => (
-            <li key={c.id ?? c.IdCaso ?? i} className="p-3 bg-white rounded border">
-              <div className="font-medium">{c.titulo ?? c.Titulo ?? '(sin título)'}</div>
-              <div className="text-sm text-gray-600">Estado: {c.estado ?? c.Estado ?? '-'}</div>
-            </li>
-          ))}
-        </ul>
+        <div className="mt-4 text-xs text-gray-500">
+          Prueba éxito: <code>demo@empresa.com</code> / <code>123456</code>
+        </div>
       </div>
     </div>
   );
