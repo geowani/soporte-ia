@@ -86,8 +86,7 @@ export default function Dashboard({ onLogout, isBlocked = true }) {
               </button>
             </div>
           </div>
-
-
+          
             {/* Botón que navega a /sugerencias */}
             <button
               onClick={() => navigate("/sugerencias")}
@@ -96,14 +95,8 @@ export default function Dashboard({ onLogout, isBlocked = true }) {
               aria-label="Suegerencias"
               title="Suegerencias"
             >
-              Suegerencias
+              👋 Suegerencias 
             </button>
-
-             {/* Sugerencias */}
-          <div className="mt-24 text-center">
-            <div className="text-3xl font-semibold"></div>
-            <div className="text-4xl mt-1">👋</div>
-          </div>
         </section>
       </div>
     </main>
