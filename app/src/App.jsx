@@ -61,7 +61,7 @@ export default function App() {
 
       <div className="min-h-screen grid place-items-center p-6">
         <section className="w-full max-w-md rounded-2xl border border-white/20 p-7 md:p-8 shadow-[0_20px_60px_rgba(0,0,0,.45)] bg-white/10 backdrop-blur-md">
-          <h1 className="text-center font-extrabold tracking-wide mb-6">INGRESA TU INFORMACIÓN</h1>
+          <h1 className="text-center font-extrabold tracking-wide mb-6">INICIO DE SESIÓN</h1>
 
           <form onSubmit={onSubmit} className="flex flex-col gap-4">
             <label className="flex flex-col gap-2 font-semibold text-slate-200">
