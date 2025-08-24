@@ -87,21 +87,22 @@ export default function Dashboard({ onLogout, isBlocked = true }) {
             </div>
           </div>
 
-          {/* Sugerencias */}
-          <div className="mt-24 text-center">
-            <div className="text-3xl font-semibold">Sugerencias</div>
-            <div className="text-4xl mt-1">👋</div>
 
             {/* Botón que navega a /sugerencias */}
             <button
               onClick={() => navigate("/sugerencias")}
               className="mt-6 px-6 py-3 rounded-xl font-semibold text-[#0b2230]"
               style={{ backgroundColor: "#59d2e6", boxShadow: "0 8px 22px rgba(89,210,230,.30)" }}
-              aria-label="Ir a sugerencias"
-              title="Ir a sugerencias"
+              aria-label="Suegerencias"
+              title="Suegerencias"
             >
-              Ir a sugerencias
+              Suegerencias
             </button>
+
+             {/* Sugerencias */}
+          <div className="mt-24 text-center">
+            <div className="text-3xl font-semibold"></div>
+            <div className="text-4xl mt-1">👋</div>
           </div>
         </section>
       </div>
