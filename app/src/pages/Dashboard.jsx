@@ -1,20 +1,32 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
-export default function Dashboard({ onLogout, isBlocked = true }) {
+export default function Dashboard({ onLogout, isBlocked = false }) {
   const [q, setQ] = useState("");
   const navigate = useNavigate();
 
   const search = () => {
-    if (!isBlocked) alert(`Buscar: ${q || "(vacío)"}`);
+    const term = q.trim();
+    if (!term) {
+      alert("Por favor ingresa un término para buscar");
+      return;
+    }
+    // TODO: aquí conectar a tu backend / resultados
+    alert(`Buscando casos relacionados con: ${term}`);
   };
 
-  // (Opcional) Esc para cerrar sesión
+  // Esc para cerrar sesión y Enter para buscar
   useEffect(() => {
-    const onKey = (e) => e.key === "Escape" && onLogout?.();
+    const onKey = (e) => {
+      if (e.key === "Escape") onLogout?.();
+      if (e.key === "Enter") {
+        e.preventDefault();
+        search();
+      }
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onLogout]);
+  }, [onLogout, q]); // q usado dentro de search
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
@@ -28,6 +40,7 @@ export default function Dashboard({ onLogout, isBlocked = true }) {
           backgroundRepeat: "no-repeat",
         }}
       />
+
       {/* Partículas */}
       <div
         className="absolute inset-0 -z-10 opacity-45"
@@ -66,17 +79,16 @@ export default function Dashboard({ onLogout, isBlocked = true }) {
           <div className="mt-8 w-full max-w-2xl mx-auto">
             <div className="flex items-center rounded-full bg-slate-200/90 overflow-hidden ring-1 ring-white/20 shadow-[0_12px_40px_rgba(0,0,0,.35)]">
               <input
-                className="flex-1 bg-transparent px-5 py-3 text-slate-900 placeholder:text-slate-600 outline-none disabled:cursor-not-allowed"
+                className="flex-1 bg-transparent px-5 py-3 text-slate-900 placeholder:text-slate-600 outline-none"
                 type="text"
-                placeholder={isBlocked ? "Usuario bloqueado" : "Busca por título, id o síntoma"}
+                placeholder="Busca por título, id o síntoma"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                disabled={isBlocked}
+                aria-label="Barra de búsqueda"
               />
               <button
                 onClick={search}
-                disabled={isBlocked}
-                className="m-1 h-10 w-10 rounded-full grid place-items-center bg-slate-300/80 hover:scale-105 transition disabled:opacity-60"
+                className="m-1 h-10 w-10 rounded-full grid place-items-center bg-slate-300/80 hover:scale-105 transition"
                 aria-label="Buscar"
                 title="Buscar"
               >
@@ -87,16 +99,18 @@ export default function Dashboard({ onLogout, isBlocked = true }) {
             </div>
           </div>
 
-            {/* Botón que navega a /sugerencias */}
+          {/* Botón Sugerencias separado */}
+          <div className="mt-12"> {/* separación extra respecto al buscador */}
             <button
               onClick={() => navigate("/sugerencias")}
-              className="mt-6 px-6 py-3 rounded-xl font-semibold text-[#0b2230]"
+              className="px-6 py-3 rounded-xl font-semibold text-[#0b2230] flex items-center gap-2 mx-auto"
               style={{ backgroundColor: "#59d2e6", boxShadow: "0 8px 22px rgba(89,210,230,.30)" }}
-              aria-label="Suegerencias"
-              title="Suegerencias"
+              aria-label="Sugerencias"
+              title="Sugerencias"
             >
-              👋 Suegerencias 
+              👋 Sugerencias
             </button>
+          </div>
         </section>
       </div>
     </main>
