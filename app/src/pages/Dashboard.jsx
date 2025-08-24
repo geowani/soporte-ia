@@ -1,11 +1,20 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 
 export default function Dashboard({ onLogout, isBlocked = true }) {
   const [q, setQ] = useState("");
+  const navigate = useNavigate();
 
   const search = () => {
     if (!isBlocked) alert(`Buscar: ${q || "(vacío)"}`);
   };
+
+  // (Opcional) Esc para cerrar sesión
+  useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && onLogout?.();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onLogout]);
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
@@ -36,15 +45,15 @@ export default function Dashboard({ onLogout, isBlocked = true }) {
       />
       <style>{`@keyframes float { 0%{transform:translateY(0)} 50%{transform:translateY(-10px)} 100%{transform:translateY(0)} }`}</style>
 
-      {/* INICIO (cerrar sesión) */}
+      {/* Salir */}
       <button
         onClick={onLogout}
-         className="absolute right-6 top-6 px-5 py-2 rounded-full bg-red-500/90 hover:bg-red-600 font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-white/50"
-         aria-label="Cerrar sesión"
-         title="Cerrar sesión"
-        >
+        className="absolute right-6 top-6 px-5 py-2 rounded-full bg-red-500/90 hover:bg-red-600 font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-white/50"
+        aria-label="Cerrar sesión"
+        title="Cerrar sesión"
+      >
         Salir
-        </button>
+      </button>
 
       {/* Contenido */}
       <div className="min-h-screen grid place-items-center p-6">
@@ -61,7 +70,7 @@ export default function Dashboard({ onLogout, isBlocked = true }) {
                 type="text"
                 placeholder={isBlocked ? "Usuario bloqueado" : "Busca por título, id o síntoma"}
                 value={q}
-                onChange={(e)=>setQ(e.target.value)}
+                onChange={(e) => setQ(e.target.value)}
                 disabled={isBlocked}
               />
               <button
@@ -82,6 +91,17 @@ export default function Dashboard({ onLogout, isBlocked = true }) {
           <div className="mt-24 text-center">
             <div className="text-3xl font-semibold">Sugerencias</div>
             <div className="text-4xl mt-1">👋</div>
+
+            {/* Botón que navega a /sugerencias */}
+            <button
+              onClick={() => navigate("/sugerencias")}
+              className="mt-6 px-6 py-3 rounded-xl font-semibold text-[#0b2230]"
+              style={{ backgroundColor: "#59d2e6", boxShadow: "0 8px 22px rgba(89,210,230,.30)" }}
+              aria-label="Ir a sugerencias"
+              title="Ir a sugerencias"
+            >
+              Ir a sugerencias
+            </button>
           </div>
         </section>
       </div>
