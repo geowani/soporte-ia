@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { login } from "./api";
 import "./index.css";
+import Dashboard from "./pages/Dashboard";
 
 export default function App() {
   const [email, setEmail] = useState("");
@@ -8,6 +9,7 @@ export default function App() {
   const [msg, setMsg] = useState("");
   const [type, setType] = useState("info"); // success | error | info
   const [loading, setLoading] = useState(false);
+  const [logged, setLogged] = useState(() => localStorage.getItem("logged") === "1");
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -19,9 +21,11 @@ export default function App() {
     }
     try {
       setLoading(true);
-      const r = await login(email, password);
+      const r = await login(email, password);        // <— tu verificación actual
       setType("success");
       setMsg(r?.message || "Inicio de sesión exitoso");
+      localStorage.setItem("logged", "1");           // <— persistir sesión sin BD
+      setLogged(true);                               // <— mostrar Dashboard
     } catch (err) {
       setType("error");
       setMsg(err.message || "Error al iniciar sesión");
@@ -30,18 +34,29 @@ export default function App() {
     }
   };
 
+  // Si ya inició sesión, mostramos el Dashboard
+  if (logged) {
+    return (
+      <Dashboard
+        isBlocked={true} // cámbialo a false cuando quieras habilitar la búsqueda
+        onLogout={() => { localStorage.removeItem("logged"); setLogged(false); }}
+      />
+    );
+  }
+
+  // Pantalla de login (la tuya, tal cual con tu estilo de fondo y partículas)
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
       {/* Fondo con tu imagen */}
       <div
-      className="absolute inset-0 -z-20"
-      style={{
-      backgroundImage: "url('/fondo.jpg')",
-      backgroundSize: "cover",
-      backgroundPosition: "center",
-      backgroundRepeat: "no-repeat"
-       }}
-       />
+        className="absolute inset-0 -z-20"
+        style={{
+          backgroundImage: "url('/fondo.jpg')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat"
+        }}
+      />
       {/* Partículas */}
       <div
         className="absolute inset-0 -z-10 opacity-45"
