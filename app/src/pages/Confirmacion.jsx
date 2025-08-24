@@ -18,7 +18,7 @@ export default function Confirmacion() {
 
       {/* Botón regresar */}
       <button
-        onClick={() => navigate("/dashboard")}
+        onClick={() => navigate("/sugerencias")}
         className="absolute right-6 top-6 text-lg tracking-wide font-semibold hover:opacity-90"
       >
         REGRESAR
