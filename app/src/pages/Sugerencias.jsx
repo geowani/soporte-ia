@@ -5,12 +5,12 @@ export default function Sugerencias() {
   const [caso, setCaso] = useState("");
   const navigate = useNavigate();
 
-  const onSubmit = (e) => {
-    e.preventDefault();
-    if (!caso.trim()) return alert("Ingresa el número de caso");
-    alert(`Sugerencia enviada para el caso: ${caso}`);
-    setCaso("");
-  };
+const onSubmit = (e) => {
+  e.preventDefault();
+  if (!caso.trim()) return alert("Ingresa el número de caso");
+  // aquí podrías llamar a la API si quieres; por ahora solo navegamos
+  navigate("/confirmacion", { state: { caso } });
+};
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
@@ -28,7 +28,7 @@ export default function Sugerencias() {
         onClick={() => navigate("/dashboard")}
         className="absolute right-6 top-6 text-lg tracking-wide font-semibold hover:opacity-90"
       >
-        INICIO
+        REGRESAR
       </button>
 
       <div className="min-h-screen grid place-items-center p-6">
