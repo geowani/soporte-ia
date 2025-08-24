@@ -1,104 +1,110 @@
 import { useState } from "react";
 import { login } from "./api";
+import "./index.css";
 
 export default function App() {
-  const [email, setEmail]       = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [msg, setMsg]           = useState("");
-  const [type, setType]         = useState("info"); // 'success' | 'error' | 'info'
-  const [loading, setLoading]   = useState(false);
+  const [msg, setMsg] = useState("");
+  const [type, setType] = useState("info"); // success | error | info
+  const [loading, setLoading] = useState(false);
 
   const onSubmit = async (e) => {
     e.preventDefault();
-    setMsg("");
-    setType("info");
-
-    // Validación básica
+    setMsg(""); setType("info");
     if (!email || !password) {
       setMsg("Completa correo y contraseña.");
       setType("error");
       return;
     }
-    // Validar formato de email simple
-    const okEmail = /\S+@\S+\.\S+/.test(email);
-    if (!okEmail) {
-      setMsg("Ingresa un correo válido.");
-      setType("error");
-      return;
-    }
-
     try {
       setLoading(true);
-      const res = await login(email, password);
-      setMsg(res.message || "Inicio de sesión exitoso");
+      const r = await login(email, password);
       setType("success");
-      // Aquí podrías navegar a otra vista (dashboard) cuando integremos routing
-    } catch (e) {
-      setMsg(e.message || "Correo o contraseña inválidos");
+      setMsg(r?.message || "Inicio de sesión exitoso");
+    } catch (err) {
       setType("error");
+      setMsg(err.message || "Error al iniciar sesión");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 grid place-items-center p-4">
-      <div className="w-full max-w-sm bg-white rounded-2xl shadow p-6">
-        <h1 className="text-xl font-bold mb-1">Bienvenido</h1>
-        <p className="text-sm text-gray-600 mb-6">Inicia sesión para continuar</p>
+    <main className="min-h-screen w-full relative overflow-hidden text-white">
+      {/* Fondo con tu imagen */}
+      <div
+      className="absolute inset-0 -z-20"
+      style={{
+      backgroundImage: "url('/fondo.jpg')",
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+      backgroundRepeat: "no-repeat"
+       }}
+       />
+      {/* Partículas */}
+      <div
+        className="absolute inset-0 -z-10 opacity-45"
+        style={{
+          backgroundImage: `
+            radial-gradient(2px 2px at 20% 30%, rgba(88,164,255,.6) 40%, transparent 41%),
+            radial-gradient(2px 2px at 40% 70%, rgba(88,164,255,.45) 40%, transparent 41%),
+            radial-gradient(2px 2px at 65% 50%, rgba(88,164,255,.5) 40%, transparent 41%),
+            radial-gradient(2px 2px at 80% 20%, rgba(88,164,255,.35) 40%, transparent 41%),
+            radial-gradient(2px 2px at 15% 85%, rgba(88,164,255,.35) 40%, transparent 41%)
+          `,
+          filter: "blur(.2px)",
+          animation: "float 12s linear infinite"
+        }}
+      />
+      <style>{`@keyframes float { 0%{transform:translateY(0)} 50%{transform:translateY(-10px)} 100%{transform:translateY(0)} }`}</style>
 
-        {msg && (
-          <div
-            className={`mb-4 rounded-lg px-3 py-2 text-sm border ${
-              type === "success"
-                ? "bg-green-50 text-green-700 border-green-200"
-                : type === "error"
-                ? "bg-red-50 text-red-700 border-red-200"
-                : "bg-gray-50 text-gray-700 border-gray-200"
-            }`}
-          >
-            {msg}
-          </div>
-        )}
+      <div className="min-h-screen grid place-items-center p-6">
+        <section className="w-full max-w-md rounded-2xl border border-white/20 p-7 md:p-8 shadow-[0_20px_60px_rgba(0,0,0,.45)] bg-white/10 backdrop-blur-md">
+          <h1 className="text-center font-extrabold tracking-wide mb-6">INGRESA TU INFORMACIÓN</h1>
 
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Correo</label>
-            <input
-              type="email"
-              className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-black/20"
-              placeholder="tucorreo@dominio.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
-            />
-          </div>
+          <form onSubmit={onSubmit} className="flex flex-col gap-4">
+            <label className="flex flex-col gap-2 font-semibold text-slate-200">
+              <span>Correo:</span>
+              <input
+                className="w-full rounded-full bg-slate-100 text-slate-900 px-4 py-3 outline-none shadow-inner shadow-black/10 focus:ring-4 ring-cyan-300"
+                type="email"
+                placeholder="demo@empresa.com"
+                value={email}
+                onChange={(e)=>setEmail(e.target.value)}
+              />
+            </label>
 
-          <div>
-            <label className="block text-sm font-medium mb-1">Contraseña</label>
-            <input
-              type="password"
-              className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-black/20"
-              placeholder="••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-            />
-          </div>
+            <label className="flex flex-col gap-2 font-semibold text-slate-200">
+              <span>Contraseña:</span>
+              <input
+                className="w-full rounded-full bg-slate-100 text-slate-900 px-4 py-3 outline-none shadow-inner shadow-black/10 focus:ring-4 ring-cyan-300"
+                type="password"
+                placeholder="••••••"
+                value={password}
+                onChange={(e)=>setPassword(e.target.value)}
+              />
+            </label>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-xl bg-black text-white py-2 font-medium hover:opacity-90 disabled:opacity-50"
-          >
-            {loading ? "Verificando..." : "Iniciar sesión"}
-          </button>
-        </form>
+            <button
+              disabled={loading}
+              type="submit"
+              className="mt-2 mx-auto w-40 h-11 rounded-xl font-extrabold text-[#0b2230] transition-transform active:translate-y-0 hover:-translate-y-0.5"
+              style={{ backgroundColor: "#59d2e6", boxShadow: "0 8px 22px rgba(89,210,230,.30)" }}
+              onMouseOver={(e)=> e.currentTarget.style.boxShadow = "0 10px 26px rgba(89,210,230,.38)"}
+              onMouseOut={(e)=> e.currentTarget.style.boxShadow = "0 8px 22px rgba(89,210,230,.30)"}
+            >
+              {loading ? "Verificando..." : "Iniciar sesión"}
+            </button>
+          </form>
 
-        <div className="mt-4 text-xs text-gray-500">
-          Prueba éxito: <code>demo@empresa.com</code> / <code>123456</code>
-        </div>
+          {msg && (
+            <div className={"mt-5 text-center text-sm " + (type==="success" ? "text-emerald-300" : type==="error" ? "text-rose-300" : "text-slate-300")}>
+              {msg}
+            </div>
+          )}
+        </section>
       </div>
-    </div>
+    </main>
   );
 }
