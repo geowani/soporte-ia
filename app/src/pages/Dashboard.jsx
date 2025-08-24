@@ -86,7 +86,7 @@ export default function Dashboard({ onLogout, isBlocked = true }) {
               </button>
             </div>
           </div>
-          
+
             {/* Botón que navega a /sugerencias */}
             <button
               onClick={() => navigate("/sugerencias")}
