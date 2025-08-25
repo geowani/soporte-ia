@@ -5,6 +5,8 @@ import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import Sugerencias from "./pages/Sugerencias";
 import Confirmacion from "./pages/Confirmacion";
+import Resultados from "./pages/Resultados";
+import CaseDashboard from "./pages/CaseDashboard";
 
 export default function App() {
   const [email, setEmail] = useState("");
@@ -127,6 +129,8 @@ return (
     <Route path="/sugerencias" element={<Sugerencias />} />
     <Route path="/confirmacion" element={<Confirmacion />} />
     <Route path="*" element={<Navigate to="/dashboard" replace />} />
+    <Route path="/" element={<Resultados />} />
+    <Route path="/dashboard/:caseId" element={<CaseDashboard />} />
   </Routes>
 );
 }
