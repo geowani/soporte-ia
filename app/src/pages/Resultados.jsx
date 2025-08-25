@@ -1,25 +1,24 @@
 import { useMemo, useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
+// Puedes sustituir esto por un import desde ../data/casos si ya creaste el dataset
 const MOCK_CASOS = [
   { id: "1052505", area: "SYS", descripcion: "Usuario no puede iniciar sesion" },
   { id: "0895420", area: "PC",  descripcion: "Usuario no puede cerrar una orden de reparación" },
   { id: "1024156", area: "PC",  descripcion: "Usuario no puede recibir mensaje de verificación." },
   { id: "1010518", area: "NET", descripcion: "Intermitencia al acceder al portal interno" },
-  // agrega los que quieras para probar el scroll…
 ];
 
 export default function Resultados() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Lee q de la URL y sincroniza input
+  // Lee q de la URL y sincroniza el input
   const urlQ = new URLSearchParams(location.search).get("q") || "";
   const [q, setQ] = useState(urlQ);
 
   useEffect(() => { setQ(urlQ); }, [urlQ]);
 
-  // Filtrado simple
   const results = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) return [];
@@ -31,12 +30,18 @@ export default function Resultados() {
   const doSearch = () => {
     const term = q.trim();
     if (!term) return;
+    // Actualiza la URL (compartible / recargable)
     navigate(`/resultados?q=${encodeURIComponent(term)}`, { replace: true });
   };
 
   // Enter para buscar
   useEffect(() => {
-    const onKey = (e) => { if (e.key === "Enter") { e.preventDefault(); doSearch(); } };
+    const onKey = (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        doSearch();
+      }
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [q]);
@@ -69,7 +74,7 @@ export default function Resultados() {
 
       {/* CONTENIDO CENTRADO */}
       <div className="mt-6 px-4 w-full flex flex-col items-center">
-        {/* Buscador centrado */}
+        {/* Buscador centrado (mismo estilo del dashboard) */}
         <div className="w-full max-w-3xl flex items-center rounded-full bg-white/85 text-slate-900 overflow-hidden shadow-inner shadow-black/10">
           <input
             className="flex-1 bg-transparent px-4 py-3 outline-none placeholder:text-slate-600"
@@ -91,7 +96,7 @@ export default function Resultados() {
           </button>
         </div>
 
-        {/* Caja de resultados centrada y auto-ajustable */}
+        {/* Caja de resultados centrada + autoajustable con scroll */}
         <div className="mt-5 w-full max-w-4xl rounded-2xl bg-slate-200/85 text-slate-900 p-5 md:p-6 border border-white/20 shadow-[0_20px_60px_rgba(0,0,0,.35)]">
           <div className="font-bold text-lg mb-3">Resultados:</div>
 
@@ -103,18 +108,17 @@ export default function Resultados() {
             <div className="text-slate-700">Sin coincidencias para “{q}”.</div>
           )}
 
-          {/* Lista auto-incrementable con scroll cuando supera el alto */}
           <div className="max-h-[60vh] overflow-y-auto pr-2">
             {results.map((c, i) => (
               <div key={c.id} className="py-3">
                 <div className="flex items-start justify-between">
-                  <a
-                    className="text-blue-600 font-bold hover:underline"
-                    href="#"
-                    onClick={(e) => e.preventDefault()}
+                  {/* Navega al detalle con la búsqueda actual */}
+                  <button
+                    onClick={() => navigate(`/caso/${c.id}`, { state: { fromQ: q } })}
+                    className="text-blue-600 font-bold hover:underline text-left"
                   >
                     Caso: {c.id}
-                  </a>
+                  </button>
                   <span className="text-blue-600 font-semibold">{c.area}</span>
                 </div>
                 <div className="text-blue-600 mt-1">
