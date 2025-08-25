@@ -13,7 +13,7 @@ export default function CasoDetalle() {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const fromQ = location.state?.fromQ || ""; // para regresar a los resultados con la búsqueda previa
+  const fromQ = location.state?.fromQ || "";
 
   const caso = useMemo(() => CASOS.find(c => c.id === id), [id]);
 
@@ -46,43 +46,43 @@ export default function CasoDetalle() {
         </button>
       </div>
 
-      {/* Buscador “sólo lectura” con el término anterior si lo hubo */}
-      <div className="mt-4 px-6 md:px-10">
+      {/* Buscador centrado */}
+      <div className="mt-4 px-4">
         <input
           value={fromQ || "Usuario bloqueado"}
           readOnly
-          className="w-[min(640px,95vw)] rounded-full bg-white/85 text-slate-900 px-4 py-2 outline-none shadow-inner shadow-black/10"
+          className="w-full max-w-3xl mx-auto block rounded-full bg-white/85 text-slate-900 px-4 py-3 outline-none shadow-inner shadow-black/10"
         />
       </div>
 
-      {/* Contenido */}
-      <div className="mt-4 px-6 md:px-10">
-        <div className="w-[min(980px,95vw)] rounded-2xl bg-slate-200/90 text-slate-900 p-6 border border-white/20 shadow-[0_20px_60px_rgba(0,0,0,.35)]">
+      {/* Tarjeta centrada */}
+      <div className="mt-5 px-4 pb-8">
+        <div className="w-full max-w-5xl mx-auto rounded-2xl bg-slate-200/90 text-slate-900 p-6 md:p-8 border border-white/20 shadow-[0_20px_60px_rgba(0,0,0,.35)]">
           {!caso ? (
             <div className="text-slate-800">
               No se encontró el caso <b>{id}</b>.
             </div>
           ) : (
             <>
-              <div className="flex items-start justify-between">
-                <div className="font-bold">Caso: {caso.id}</div>
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                <div className="font-bold text-lg">Caso: {caso.id}</div>
                 <div className="text-right">
                   <div>Inicio: {fmt(caso.inicio)}</div>
                   <div>Cierre: {fmt(caso.cierre)}</div>
                 </div>
               </div>
 
-              <div className="mt-4 font-bold">Descripción:</div>
+              <div className="mt-6 font-bold">Descripción:</div>
               <p className="mt-1 leading-relaxed">
                 {caso.descripcion}
               </p>
 
-              <div className="mt-4 font-bold">Solución:</div>
+              <div className="mt-6 font-bold">Solución:</div>
               <p className="mt-1 leading-relaxed">
                 {caso.solucion}
               </p>
 
-              <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+              <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-6 text-center">
                 <div>
                   <div className="font-bold">Resuelto por:</div>
                   <div>{caso.resueltoPor}</div>
