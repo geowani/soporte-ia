@@ -1,32 +1,30 @@
+// app/src/pages/Dashboard.jsx
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { CASES } from "../data/cases.js";
 
 export default function Dashboard({ onLogout, isBlocked = false }) {
   const [q, setQ] = useState("");
   const navigate = useNavigate();
 
   const search = () => {
-    const term = q.trim();
-    if (!term) {
-      alert("Por favor ingresa un término para buscar");
-      return;
-    }
-    // TODO: aquí conectar a tu backend / resultados
-    alert(`Buscando casos relacionados con: ${term}`);
-  };
+  const term = q.trim();
+  if (!term) return navigate("/");                 // abre lista completa
+  // si coincide con ID exacto -> ir directo al caso
+  const exact = CASES.find(c => c.id === term);
+  if (exact) return navigate(`/dashboard/${exact.id}`);
+  // si no, abrir resultados filtrados
+  navigate(`/?q=${encodeURIComponent(term)}`);
+};
 
-  // Esc para cerrar sesión y Enter para buscar
+  // Esc para cerrar sesión (Enter lo manejo en el input)
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "Escape") onLogout?.();
-      if (e.key === "Enter") {
-        e.preventDefault();
-        search();
-      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onLogout, q]); // q usado dentro de search
+  }, [onLogout]);
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
@@ -34,7 +32,7 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
       <div
         className="absolute inset-0 -z-20"
         style={{
-          backgroundImage: "url('/fondo.jpg')",
+          backgroundImage: `url('${import.meta.env.BASE_URL}fondo.jpg')`,
           backgroundSize: "cover",
           backgroundPosition: "center",
           backgroundRepeat: "no-repeat",
@@ -84,6 +82,7 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
                 placeholder="Busca por título, id o síntoma"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && search()}
                 aria-label="Barra de búsqueda"
               />
               <button
@@ -99,8 +98,8 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
             </div>
           </div>
 
-          {/* Botón Sugerencias separado */}
-          <div className="mt-12"> {/* separación extra respecto al buscador */}
+          {/* Botón Sugerencias */}
+          <div className="mt-12">
             <button
               onClick={() => navigate("/sugerencias")}
               className="px-6 py-3 rounded-xl font-semibold text-[#0b2230] flex items-center gap-2 mx-auto"
