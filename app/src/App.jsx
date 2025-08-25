@@ -6,6 +6,7 @@ import Dashboard from "./pages/Dashboard";
 import Sugerencias from "./pages/Sugerencias";
 import Confirmacion from "./pages/Confirmacion";
 import Resultados from "./pages/Resultados";
+import CasoDetalle from "./pages/CasoDetalle";
 
 export default function App() {
   const [email, setEmail] = useState("");
@@ -129,6 +130,7 @@ return (
     <Route path="/confirmacion" element={<Confirmacion />} />
     <Route path="*" element={<Navigate to="/dashboard" replace />} />
     <Route path="/resultados" element={<Resultados />} />   {/* ← nueva */}
+    <Route path="/caso/:id" element={<CasoDetalle />} />
   </Routes>
 );
 }
