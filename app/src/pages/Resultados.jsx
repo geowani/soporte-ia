@@ -1,6 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { CASES } from "../data/cases";
-
+import { CASES } from "../data/cases.js";
 export default function Resultados() {
   const navigate = useNavigate();
 

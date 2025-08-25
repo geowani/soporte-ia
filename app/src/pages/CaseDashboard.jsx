@@ -1,6 +1,6 @@
 // src/pages/CaseDashboard.jsx
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { getCaseById, CASES } from "../data/cases";
+import { getCaseById, CASES } from "../data/cases.js";
 import { useMemo, useState } from "react";
 
 const Badge = ({ children }) => (
