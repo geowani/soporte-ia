@@ -5,15 +5,14 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
   const [q, setQ] = useState("");
   const navigate = useNavigate();
 
-  const search = () => {
-    const term = q.trim();
-    if (!term) {
-      alert("Por favor ingresa un término para buscar");
-      return;
-    }
-    // TODO: aquí conectar a tu backend / resultados
-    alert(`Buscando casos relacionados con: ${term}`);
-  };
+const search = () => {
+  const term = q.trim();
+  if (!term) {
+    alert("Por favor ingresa un término para buscar");
+    return;
+  }
+  navigate(`/resultados?q=${encodeURIComponent(term)}`);
+};
 
   // Esc para cerrar sesión y Enter para buscar
   useEffect(() => {
