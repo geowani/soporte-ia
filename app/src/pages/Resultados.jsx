@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const MOCK_CASOS = [
@@ -8,22 +8,45 @@ const MOCK_CASOS = [
   { id: "1010518", area: "NET", descripcion: "Intermitencia al acceder al portal interno" },
 ];
 
-function useQuery() {
-  const { search } = useLocation();
-  return useMemo(() => new URLSearchParams(search), [search]);
-}
-
 export default function Resultados() {
-  const q = useQuery().get("q")?.trim() || "";
+  const location = useLocation();
   const navigate = useNavigate();
 
-  // Filtro simple por id o texto (case-insensitive)
+  // Lee q de la URL y sincroniza el input
+  const urlQ = new URLSearchParams(location.search).get("q") || "";
+  const [q, setQ] = useState(urlQ);
+
+  useEffect(() => {
+    // Si cambia la URL (por volver desde dashboard con otra q),
+    // sincronizamos el input.
+    setQ(urlQ);
+  }, [urlQ]);
+
   const results = useMemo(() => {
-    if (!q) return MOCK_CASOS;
-    const s = q.toLowerCase();
+    const s = q.trim().toLowerCase();
+    if (!s) return [];
     return MOCK_CASOS.filter(
-      c => c.id.includes(q) || c.descripcion.toLowerCase().includes(s)
+      c => c.id.includes(s) || c.descripcion.toLowerCase().includes(s)
     );
+  }, [q]);
+
+  const doSearch = () => {
+    const term = q.trim();
+    if (!term) return;
+    // actualiza la URL para que sea compartible
+    navigate(`/resultados?q=${encodeURIComponent(term)}`, { replace: true });
+  };
+
+  // Enter para buscar
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        doSearch();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, [q]);
 
   return (
@@ -52,20 +75,38 @@ export default function Resultados() {
         </button>
       </div>
 
-      {/* Contenido */}
+      {/* Buscador (igual estilo que dashboard) */}
       <div className="mt-4 px-6 md:px-10">
-        {/* “input” solo mostrando la consulta */}
-        <input
-          value={q || "Usuario bloqueado"}
-          readOnly
-          className="w-[min(640px,95vw)] rounded-full bg-white/85 text-slate-900 px-4 py-2 outline-none shadow-inner shadow-black/10"
-        />
+        <div className="w-[min(760px,95vw)] flex items-center rounded-full bg-white/85 text-slate-900 overflow-hidden shadow-inner shadow-black/10">
+          <input
+            className="flex-1 bg-transparent px-4 py-2 outline-none placeholder:text-slate-600"
+            type="text"
+            placeholder="Busca por título, id o síntoma"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            aria-label="Barra de búsqueda"
+          />
+          <button
+            onClick={doSearch}
+            className="m-1 h-10 w-10 rounded-full grid place-items-center bg-slate-300/80 hover:scale-105 transition"
+            aria-label="Buscar"
+            title="Buscar"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5 fill-slate-700">
+              <path d="M15.5 14h-.79l-.28-.27a6.471 6.471 0 0 0 1.57-4.23C16 6.01 12.99 3 9.5 3S3 6.01 3 9.5 6.01 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99 1.49-1.49-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+            </svg>
+          </button>
+        </div>
 
         {/* Caja de resultados */}
         <div className="mt-5 w-[min(980px,95vw)] rounded-2xl bg-slate-200/85 text-slate-900 p-5 md:p-6 border border-white/20 shadow-[0_20px_60px_rgba(0,0,0,.35)]">
           <div className="font-bold text-lg mb-3">Resultados:</div>
 
-          {results.length === 0 && (
+          {!q.trim() && (
+            <div className="text-slate-700">Escribe un término para buscar.</div>
+          )}
+
+          {q.trim() && results.length === 0 && (
             <div className="text-slate-700">Sin coincidencias para “{q}”.</div>
           )}
 
@@ -84,8 +125,6 @@ export default function Resultados() {
               <div className="text-blue-600 mt-1">
                 Descripcion: {c.descripcion}
               </div>
-
-              {/* Separador */}
               {i < results.length - 1 && (
                 <div className="mt-3 h-px bg-slate-500/60 w-full"></div>
               )}
