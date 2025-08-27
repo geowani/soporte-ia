@@ -1,3 +1,4 @@
+// api/Login/index.js
 module.exports = async function (context, req) {
   // Preflight simple
   if (req.method === 'OPTIONS') {
@@ -20,21 +21,30 @@ module.exports = async function (context, req) {
     }
   } catch (e) { /* ignore parse errors */ }
 
-  // Credenciales de prueba
-  const OK_EMAIL = 'demo@empresa.com';
-  const OK_PASS  = '123456';
+  // ---- Usuarios mock con roles ----
+  const users = [
+    { email: 'demo@empresa.com',  password: '123456', role: 'user'  },
+    { email: 'admin@empresa.com', password: '123456', role: 'admin' }
+  ];
 
-  if (email === OK_EMAIL && password === OK_PASS) {
+  const user = users.find(u => u.email === email && u.password === password);
+
+  if (user) {
     context.res = {
       status: 200,
-      headers: { "Content-Type": "application/json" },
-      body: { ok: true, message: "Inicio de sesión exitoso" }
+      headers: { 'Content-Type': 'application/json' },
+      body: {
+        ok: true,
+        message: 'Inicio de sesión exitoso',
+        email: user.email,
+        role: user.role
+      }
     };
   } else {
     context.res = {
       status: 401,
-      headers: { "Content-Type": "application/json" },
-      body: { ok: false, message: "Correo o contraseña inválidos" }
+      headers: { 'Content-Type': 'application/json' },
+      body: { ok: false, message: 'Correo o contraseña inválidos' }
     };
   }
 };

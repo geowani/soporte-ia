@@ -1,3 +1,4 @@
+// app/src/App.jsx
 import { useState } from "react";
 import { login } from "./api";
 import "./index.css";
@@ -7,6 +8,7 @@ import Sugerencias from "./pages/Sugerencias";
 import Confirmacion from "./pages/Confirmacion";
 import Resultados from "./pages/Resultados";
 import CasoDetalle from "./pages/CasoDetalle";
+import AdminDashboard from "./pages/AdminDashboard"; // ⬅️ agregado
 
 export default function App() {
   const [email, setEmail] = useState("");
@@ -21,14 +23,29 @@ export default function App() {
     e.preventDefault();
     setMsg(""); setType("info");
     if (!email || !password) { setMsg("Completa correo y contraseña."); setType("error"); return; }
+
     try {
       setLoading(true);
+      // Espera { ok, message, email, role }
       const r = await login(email, password);
+
       setType("success");
       setMsg(r?.message || "Inicio de sesión exitoso");
+
+      // Guarda sesión y rol
       localStorage.setItem("logged", "1");
+      localStorage.setItem("userRole", r?.role || "user");
+      localStorage.setItem("userEmail", r?.email || email);
+
       setLogged(true);
-      navigate("/dashboard");          // ⇠ ir al dashboard al iniciar sesión
+
+      // Redirección por rol
+      const role = r?.role || "user";
+      if (role === "admin") {
+        navigate("/admin");
+      } else {
+        navigate("/dashboard");
+      }
     } catch (err) {
       setType("error");
       setMsg(err.message || "Error al iniciar sesión");
@@ -37,7 +54,7 @@ export default function App() {
     }
   };
 
-  // Si NO está logueado, muestra tu login tal cual (sin router)
+  // Si NO está logueado, muestra el login
   if (!logged) {
     return (
       <main className="min-h-screen w-full relative overflow-hidden text-white">
@@ -106,7 +123,10 @@ export default function App() {
             </form>
 
             {msg && (
-              <div className={"mt-5 text-center text-sm " + (type==="success" ? "text-emerald-300" : type==="error" ? "text-rose-300" : "text-slate-300")}>
+              <div className={
+                "mt-5 text-center text-sm " +
+                (type==="success" ? "text-emerald-300" : type==="error" ? "text-rose-300" : "text-slate-300")
+              }>
                 {msg}
               </div>
             )}
@@ -116,21 +136,41 @@ export default function App() {
     );
   }
 
-  // Si SÍ está logueado, usa rutas (dashboard / sugerencias)
+  // Si SÍ está logueado, usa rutas (dashboard / admin / etc.)
   const onLogout = () => {
     localStorage.removeItem("logged");
+    localStorage.removeItem("userRole");
+    localStorage.removeItem("userEmail");
     setLogged(false);
     navigate("/");
   };
-  
-return (
-  <Routes>
-    <Route path="/dashboard" element={<Dashboard isBlocked={true} onLogout={onLogout} />} />
-    <Route path="/sugerencias" element={<Sugerencias />} />
-    <Route path="/confirmacion" element={<Confirmacion />} />
-    <Route path="*" element={<Navigate to="/dashboard" replace />} />
-    <Route path="/resultados" element={<Resultados />} />   {/* ← nueva */}
-    <Route path="/caso/:id" element={<CasoDetalle />} />
-  </Routes>
-);
+
+  const role = localStorage.getItem("userRole") || "user";
+
+  return (
+    <Routes>
+      {/* Ruta de Admin protegida */}
+      <Route
+        path="/admin"
+        element={
+          role === "admin"
+            ? <AdminDashboard onLogout={onLogout} />
+            : <Navigate to="/dashboard" replace />
+        }
+      />
+
+      {/* Rutas de usuario */}
+      <Route path="/dashboard" element={<Dashboard isBlocked={true} onLogout={onLogout} />} />
+      <Route path="/sugerencias" element={<Sugerencias />} />
+      <Route path="/confirmacion" element={<Confirmacion />} />
+      <Route path="/resultados" element={<Resultados />} />
+      <Route path="/caso/:id" element={<CasoDetalle />} />
+
+      {/* Redirección por rol para cualquier otra ruta */}
+      <Route
+        path="*"
+        element={<Navigate to={role === "admin" ? "/admin" : "/dashboard"} replace />}
+      />
+    </Routes>
+  );
 }
