@@ -93,7 +93,7 @@ export default function App() {
                 <input
                   className="w-full rounded-full bg-slate-100 text-slate-900 px-4 py-3 outline-none shadow-inner shadow-black/10 focus:ring-4 ring-cyan-300"
                   type="email"
-                  placeholder="demo@empresa.com"
+                  placeholder="Correo"
                   value={email}
                   onChange={(e)=>setEmail(e.target.value)}
                 />
