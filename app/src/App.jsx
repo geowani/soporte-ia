@@ -8,7 +8,8 @@ import Sugerencias from "./pages/Sugerencias";
 import Confirmacion from "./pages/Confirmacion";
 import Resultados from "./pages/Resultados";
 import CasoDetalle from "./pages/CasoDetalle";
-import AdminDashboard from "./pages/AdminDashboard"; // ⬅️ agregado
+import AdminDashboard from "./pages/AdminDashboard"; // ⬅️ admin home
+import AdminAgentes from "./pages/AdminAgentes";     // ⬅️ NUEVO
 
 export default function App() {
   const [email, setEmail] = useState("");
@@ -149,12 +150,22 @@ export default function App() {
 
   return (
     <Routes>
-      {/* Ruta de Admin protegida */}
+      {/* Admin Home */}
       <Route
         path="/admin"
         element={
           role === "admin"
             ? <AdminDashboard onLogout={onLogout} />
+            : <Navigate to="/dashboard" replace />
+        }
+      />
+
+      {/* NUEVA: Agentes con más búsquedas (protegida) */}
+      <Route
+        path="/admin/agentes"
+        element={
+          role === "admin"
+            ? <AdminAgentes />
             : <Navigate to="/dashboard" replace />
         }
       />
