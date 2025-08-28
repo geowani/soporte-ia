@@ -34,7 +34,7 @@ export default function AdminDashboard({ onLogout }) {
 
       {/* Contenedor central */}
       <div className="min-h-screen grid place-items-center p-6">
-        <section className="w-full max-w-4xl rounded-2xl border border-white/20 p-12 md:p-16 shadow-[0_20px_60px_rgba(0,0,0,.45)] bg-white/90 text-black">
+        <section className="w-full max-w-4xl rounded-2xl border border-white/20 p-12 md:p-16 shadow-[0_20px_60px_rgba(0,0,0,.45)] bg-white/10 backdrop-blur-md text-white">
           {/* Header */}
           <div className="flex justify-between items-center mb-10">
             <h1 className="text-4xl font-extrabold">Administrador</h1>
