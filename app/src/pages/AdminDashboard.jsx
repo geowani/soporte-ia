@@ -59,8 +59,8 @@ export default function AdminDashboard({ onLogout }) {
 
             <button
               type="button"
-              onClick={() => nav("/admin/agregar-caso")}
-              className="text-blue-600 font-semibold text-left border-b border-black pb-3 text-xl"
+             onClick={() => nav("/admin/agregar-caso")}
+            className="text-blue-600 font-semibold text-left border-b border-black pb-3 text-xl"
             >
               Agregar caso al sistema
             </button>
