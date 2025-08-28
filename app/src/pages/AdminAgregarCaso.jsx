@@ -64,7 +64,7 @@ export default function AdminAgregarCaso() {
             </h1>
             <button
               onClick={() => nav("/admin")}
-              className="text-white bg-black/70 px-5 py-2 rounded-lg font-semibold hover:bg-black"
+              cclassName="absolute right-6 top-6 px-5 py-2 rounded-full bg-red-500/90 hover:bg-red-600 font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-white/50"
             >
               Regresar
             </button>
