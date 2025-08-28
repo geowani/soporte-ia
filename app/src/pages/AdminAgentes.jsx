@@ -18,7 +18,7 @@ export default function AdminAgentes() {
   );
 
   return (
-    <main className="min-h-screen w-full relative overflow-hidden text-white">
+    <main className="min-h-screen w-full relative overflow-hidden text-red">
       {/* Fondo igual al admin/login */}
       <div
         className="absolute inset-0 -z-20"
@@ -62,7 +62,7 @@ export default function AdminAgentes() {
 
           {/* Tabla simple */}
           <div className="rounded-xl bg-gray-200 p-6 md:p-8">
-            <div className="grid grid-cols-[1fr_auto] items-center px-2 md:px-4 pb-3 text-red-700 font-semibold">
+            <div className="grid grid-cols-[1fr_auto] items-center px-2 md:px-4 pb-3 text-black-700 font-semibold">
               <span>Agente:</span>
               <span>Buscas realizadas:</span>
             </div>
