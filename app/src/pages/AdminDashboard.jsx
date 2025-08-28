@@ -53,7 +53,7 @@ export default function AdminDashboard({ onLogout }) {
             <button
               type="button"
               onClick={() => nav("/admin/agentes")}
-              className="text-blue-300 hover:text-white-300 font-semibold text-left border-b border-white/20 pb-3 text-xl transition-transform hover:translate-x-0.5"
+              className="text-white-300 hover:text-white-300 font-semibold text-left border-b border-white/20 pb-3 text-xl transition-transform hover:translate-x-0.5"
             >
               Agentes con más búsquedas
             </button>
@@ -61,7 +61,7 @@ export default function AdminDashboard({ onLogout }) {
             <button
               type="button"
               onClick={() => nav("/admin/agregar-caso")}
-              className="text-blue-300 hover:text-white-300 font-semibold text-left border-b border-white/20 pb-3 text-xl transition-transform hover:translate-x-0.5"
+              className="text-white-300 hover:text-white-300 font-semibold text-left border-b border-white/20 pb-3 text-xl transition-transform hover:translate-x-0.5"
             >
               Agregar caso al sistema
             </button>
@@ -69,7 +69,7 @@ export default function AdminDashboard({ onLogout }) {
             <button
               type="button"
               onClick={() => nav("/admin/sugerencias")}
-              className="text-blue-300 hover:text-white-300 font-semibold text-left border-b border-white/20 pb-3 text-xl transition-transform hover:translate-x-0.5"
+              className="text-white-300 hover:text-white-300 font-semibold text-left border-b border-white/20 pb-3 text-xl transition-transform hover:translate-x-0.5"
             >
               Revisar las sugerencias
             </button>
@@ -77,7 +77,7 @@ export default function AdminDashboard({ onLogout }) {
             <button
               type="button"
               onClick={() => nav("/admin/historial")}
-              className="text-blue-300 hover:text-white-300 font-semibold text-left border-b border-white/20 pb-3 text-xl transition-transform hover:translate-x-0.5"
+              className="text-white-300 hover:text-white-300 font-semibold text-left border-b border-white/20 pb-3 text-xl transition-transform hover:translate-x-0.5"
             >
               Historial de casos
             </button>
