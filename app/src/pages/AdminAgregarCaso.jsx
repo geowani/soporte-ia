@@ -22,8 +22,6 @@ export default function AdminAgregarCaso() {
   const handleSubmit = (e) => {
     e.preventDefault();
     console.log("Formulario enviado:", form);
-    // 👇 luego aquí llamamos a la API
-    // await adminApi.agregarCaso(form)
     alert("Caso agregado (mock). Revisa la consola.");
     nav("/admin");
   };
@@ -58,10 +56,10 @@ export default function AdminAgregarCaso() {
 
       {/* Contenedor */}
       <div className="min-h-screen grid place-items-center p-6">
-        <section className="w-full max-w-5xl rounded-2xl border border-white/20 p-10 md:p-14 shadow-[0_20px_60px_rgba(0,0,0,.45)] bg-white/10 backdrop-blur-md text-white">
+        <section className="w-full max-w-5xl rounded-2xl border border-white/20 p-10 md:p-14 shadow-[0_20px_60px_rgba(0,0,0,.45)] bg-white/10 backdrop-blur-md">
           {/* Header */}
           <div className="flex items-center justify-between mb-8">
-            <h1 className="text-3xl md:text-4xl font-extrabold uppercase">
+            <h1 className="text-3xl md:text-4xl font-extrabold uppercase text-white">
               Agregar Casos
             </h1>
             <button
@@ -77,57 +75,93 @@ export default function AdminAgregarCaso() {
             {/* Fila 1 */}
             <div className="grid grid-cols-2 gap-6">
               <div>
-                <label className="block font-semibold">Caso</label>
-                <input name="caso" value={form.caso} onChange={handleChange}
-                  className="w-full rounded-full px-4 py-2 bg-gray-200" />
+                <label className="block font-semibold text-white">Caso</label>
+                <input
+                  name="caso"
+                  value={form.caso}
+                  onChange={handleChange}
+                  className="w-full rounded-full px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
+                />
               </div>
               <div>
-                <label className="block font-semibold">Nivel</label>
-                <input name="nivel" value={form.nivel} onChange={handleChange}
-                  className="w-full rounded-full px-4 py-2 bg-gray-200" />
+                <label className="block font-semibold text-white">Nivel</label>
+                <input
+                  name="nivel"
+                  value={form.nivel}
+                  onChange={handleChange}
+                  className="w-full rounded-full px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
+                />
               </div>
             </div>
 
             {/* Fila 2 */}
             <div className="grid grid-cols-2 gap-6">
               <div>
-                <label className="block font-semibold">Agente</label>
-                <input name="agente" value={form.agente} onChange={handleChange}
-                  className="w-full rounded-full px-4 py-2 bg-gray-200" />
+                <label className="block font-semibold text-white">Agente</label>
+                <input
+                  name="agente"
+                  value={form.agente}
+                  onChange={handleChange}
+                  className="w-full rounded-full px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
+                />
               </div>
               <div>
-                <label className="block font-semibold">Inicio</label>
-                <input type="date" name="inicio" value={form.inicio} onChange={handleChange}
-                  className="w-full rounded-full px-4 py-2 bg-gray-200" />
+                <label className="block font-semibold text-white">Inicio</label>
+                <input
+                  type="date"
+                  name="inicio"
+                  value={form.inicio}
+                  onChange={handleChange}
+                  className="w-full rounded-full px-4 py-2 bg-gray-200 text-black"
+                />
               </div>
             </div>
 
             {/* Fila 3 */}
             <div className="grid grid-cols-2 gap-6">
               <div>
-                <label className="block font-semibold">LOB</label>
-                <input name="lob" value={form.lob} onChange={handleChange}
-                  className="w-full rounded-full px-4 py-2 bg-gray-200" />
+                <label className="block font-semibold text-white">LOB</label>
+                <input
+                  name="lob"
+                  value={form.lob}
+                  onChange={handleChange}
+                  className="w-full rounded-full px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
+                />
               </div>
               <div>
-                <label className="block font-semibold">Cierre</label>
-                <input type="date" name="cierre" value={form.cierre} onChange={handleChange}
-                  className="w-full rounded-full px-4 py-2 bg-gray-200" />
+                <label className="block font-semibold text-white">Cierre</label>
+                <input
+                  type="date"
+                  name="cierre"
+                  value={form.cierre}
+                  onChange={handleChange}
+                  className="w-full rounded-full px-4 py-2 bg-gray-200 text-black"
+                />
               </div>
             </div>
 
             {/* Descripción */}
             <div>
-              <label className="block font-semibold">Descripción</label>
-              <textarea name="descripcion" value={form.descripcion} onChange={handleChange}
-                rows="3" className="w-full rounded-lg px-4 py-2 bg-gray-200" />
+              <label className="block font-semibold text-white">Descripción</label>
+              <textarea
+                name="descripcion"
+                value={form.descripcion}
+                onChange={handleChange}
+                rows="3"
+                className="w-full rounded-lg px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
+              />
             </div>
 
             {/* Solución */}
             <div>
-              <label className="block font-semibold">Solución</label>
-              <textarea name="solucion" value={form.solucion} onChange={handleChange}
-                rows="3" className="w-full rounded-lg px-4 py-2 bg-gray-200" />
+              <label className="block font-semibold text-white">Solución</label>
+              <textarea
+                name="solucion"
+                value={form.solucion}
+                onChange={handleChange}
+                rows="3"
+                className="w-full rounded-lg px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
+              />
             </div>
 
             {/* Botón enviar */}
