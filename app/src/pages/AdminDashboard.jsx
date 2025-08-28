@@ -52,7 +52,7 @@ export default function AdminDashboard({ onLogout }) {
             <button
               type="button"
               onClick={() => nav("/admin/agentes")}
-              className="text-white-600 font-semibold text-left border-b border-black pb-3 text-xl"
+              className="text-white-600 font-semibold text-left border-b border-blue pb-3 text-xl"
             >
               Agentes con más búsquedas
             </button>
@@ -60,7 +60,7 @@ export default function AdminDashboard({ onLogout }) {
             <button
               type="button"
              onClick={() => nav("/admin/agregar-caso")}
-            className="text-white-600 font-semibold text-left border-b border-black pb-3 text-xl"
+            className="text-white-600 font-semibold text-left border-b border-blue pb-3 text-xl"
             >
               Agregar caso al sistema
             </button>
@@ -68,7 +68,7 @@ export default function AdminDashboard({ onLogout }) {
             <button
               type="button"
               onClick={() => nav("/admin/sugerencias")}
-              className="text-white-600 font-semibold text-left border-b border-black pb-3 text-xl"
+              className="text-white-600 font-semibold text-left border-b border-blue pb-3 text-xl"
             >
               Revisar las sugerencias
             </button>
@@ -76,7 +76,7 @@ export default function AdminDashboard({ onLogout }) {
             <button
               type="button"
               onClick={() => nav("/admin/historial")}
-              className="text-white-600 font-semibold text-left border-b border-black pb-3 text-xl"
+              className="text-white-600 font-semibold text-left border-b border-blue pb-3 text-xl"
             >
               Historial de casos
             </button>
