@@ -66,7 +66,7 @@ export default function Resultados() {
         </h1>
         <button
           onClick={() => navigate("/dashboard")}
-          className="text-white font-semibold tracking-wide hover:opacity-90"
+          className="absolute right-6 top-6 px-5 py-2 rounded-full bg-red-500/90 hover:bg-red-600 font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-white/50"
         >
           REGRESAR
         </button>
