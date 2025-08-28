@@ -54,7 +54,7 @@ export default function AdminAgentes() {
             </h1>
             <button
               onClick={() => nav("/admin")}
-              className="text-white bg-black/70 px-5 py-2 rounded-lg font-semibold hover:bg-black"
+              className="text-black bg-black/70 px-5 py-2 rounded-lg font-semibold hover:bg-black"
             >
               Regresar
             </button>
