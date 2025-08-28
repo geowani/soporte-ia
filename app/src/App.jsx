@@ -3,17 +3,15 @@ import { useState } from "react";
 import { login } from "./api";
 import "./index.css";
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
-
 import Dashboard from "./pages/Dashboard";
 import Sugerencias from "./pages/Sugerencias";
 import Confirmacion from "./pages/Confirmacion";
 import Resultados from "./pages/Resultados";
 import CasoDetalle from "./pages/CasoDetalle";
-
 import AdminDashboard from "./pages/AdminDashboard";       // admin home
 import AdminAgentes from "./pages/AdminAgentes";           // /admin/agentes
 import AdminAgregarCaso from "./pages/AdminAgregarCaso";   // /admin/agregar-caso
-import AdminSugerencias from "./pages/AdminSugerencias";   // ✅ /admin/sugerencias (NUEVO)
+import AdminSugerencias from "./pages/AdminSugerencias";   // /admin/sugerencias (NUEVO)
 
 export default function App() {
   const [email, setEmail] = useState("");
