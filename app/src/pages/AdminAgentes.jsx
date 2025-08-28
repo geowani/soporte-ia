@@ -5,7 +5,6 @@ import { useNavigate } from "react-router-dom";
 export default function AdminAgentes() {
   const nav = useNavigate();
 
-  // 🧪 Mock temporal (luego lo cambiamos por API)
   const data = useMemo(
     () => [
       { nombre: "Lester Estrada", busquedas: 10 },
@@ -19,7 +18,7 @@ export default function AdminAgentes() {
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden">
-      {/* Fondo igual al admin/login */}
+      {/* Fondo */}
       <div
         className="absolute inset-0 -z-20"
         style={{
@@ -46,10 +45,10 @@ export default function AdminAgentes() {
       <style>{`@keyframes float { 0%{transform:translateY(0)} 50%{transform:translateY(-10px)} 100%{transform:translateY(0)} }`}</style>
 
       <div className="min-h-screen grid place-items-center p-6">
-        <section className="w-full max-w-5xl rounded-2xl border border-white/20 p-10 md:p-14 shadow-[0_20px_60px_rgba(0,0,0,.45)] bg-white/10 backdrop-blur-md text-black">
+        <section className="w-full max-w-5xl rounded-2xl border border-white/20 p-10 md:p-14 shadow-[0_20px_60px_rgba(0,0,0,.45)] bg-white/80 backdrop-blur-md text-black">
           {/* Encabezado */}
           <div className="flex items-center justify-between mb-8">
-            <h1 className="text-3xl md:text-4xl font-extrabold uppercase">
+            <h1 className="text-3xl md:text-4xl font-extrabold uppercase text-white">
               Agentes con más búsquedas
             </h1>
             <button
@@ -60,7 +59,7 @@ export default function AdminAgentes() {
             </button>
           </div>
 
-          {/* Tabla simple */}
+          {/* Tabla */}
           <div className="rounded-xl bg-gray-100 p-6 md:p-8 text-black">
             <div className="grid grid-cols-[1fr_auto] items-center px-2 md:px-4 pb-3 font-semibold text-gray-800">
               <span>Agente:</span>
