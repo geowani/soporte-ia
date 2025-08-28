@@ -37,7 +37,7 @@ export default function AdminDashboard({ onLogout }) {
         <section className="relative w-full max-w-5xl rounded-2xl border border-white/20 p-12 md:p-16 shadow-[0_20px_60px_rgba(0,0,0,.45)] bg-white/10 backdrop-blur-md">
           {/* Header */}
           <div className="flex justify-between items-center mb-10">
-            <h1 className="text-4xl md:text-5xl font-extrabold">Administrador</h1>
+            <h1 className="text-4xl md:text-5xl font-extrabold">Panel de Administrador</h1>
 
             <button
               onClick={onLogout}
@@ -53,7 +53,7 @@ export default function AdminDashboard({ onLogout }) {
             <button
               type="button"
               onClick={() => nav("/admin/agentes")}
-              className="text-blue-300 hover:text-cyan-300 font-semibold text-left border-b border-white/20 pb-3 text-xl transition-transform hover:translate-x-0.5"
+              className="text-blue-300 hover:text-white-300 font-semibold text-left border-b border-white/20 pb-3 text-xl transition-transform hover:translate-x-0.5"
             >
               Agentes con más búsquedas
             </button>
@@ -61,7 +61,7 @@ export default function AdminDashboard({ onLogout }) {
             <button
               type="button"
               onClick={() => nav("/admin/agregar-caso")}
-              className="text-blue-300 hover:text-cyan-300 font-semibold text-left border-b border-white/20 pb-3 text-xl transition-transform hover:translate-x-0.5"
+              className="text-blue-300 hover:text-white-300 font-semibold text-left border-b border-white/20 pb-3 text-xl transition-transform hover:translate-x-0.5"
             >
               Agregar caso al sistema
             </button>
@@ -69,7 +69,7 @@ export default function AdminDashboard({ onLogout }) {
             <button
               type="button"
               onClick={() => nav("/admin/sugerencias")}
-              className="text-blue-300 hover:text-cyan-300 font-semibold text-left border-b border-white/20 pb-3 text-xl transition-transform hover:translate-x-0.5"
+              className="text-blue-300 hover:text-white-300 font-semibold text-left border-b border-white/20 pb-3 text-xl transition-transform hover:translate-x-0.5"
             >
               Revisar las sugerencias
             </button>
@@ -77,7 +77,7 @@ export default function AdminDashboard({ onLogout }) {
             <button
               type="button"
               onClick={() => nav("/admin/historial")}
-              className="text-blue-300 hover:text-cyan-300 font-semibold text-left border-b border-white/20 pb-3 text-xl transition-transform hover:translate-x-0.5"
+              className="text-blue-300 hover:text-white-300 font-semibold text-left border-b border-white/20 pb-3 text-xl transition-transform hover:translate-x-0.5"
             >
               Historial de casos
             </button>
