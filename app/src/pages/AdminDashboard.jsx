@@ -40,7 +40,7 @@ export default function AdminDashboard({ onLogout }) {
             <h1 className="text-4xl font-extrabold">Administrador</h1>
             <button
               onClick={onLogout}
-              className="font-semibold text-white-600 hover:underline text-lg"
+              className="font-semibold text-blue-600 hover:underline text-lg"
               type="button"
             >
               Salir
