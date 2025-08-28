@@ -58,7 +58,7 @@ export default function AdminAgregarCaso() {
 
       {/* Contenedor */}
       <div className="min-h-screen grid place-items-center p-6">
-        <section className="w-full max-w-5xl rounded-2xl border border-white/20 p-10 md:p-14 shadow-[0_20px_60px_rgba(0,0,0,.45)] bg-white/90 text-black">
+        <section className="w-full max-w-5xl rounded-2xl border border-white/20 p-10 md:p-14 shadow-[0_20px_60px_rgba(0,0,0,.45)] bg-white/10 backdrop-blur-md text-white">
           {/* Header */}
           <div className="flex items-center justify-between mb-8">
             <h1 className="text-3xl md:text-4xl font-extrabold uppercase">
