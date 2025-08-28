@@ -18,7 +18,7 @@ export default function AdminAgentes() {
   );
 
   return (
-    <main className="min-h-screen w-full relative overflow-hidden text-red">
+    <main className="min-h-screen w-full relative overflow-hidden">
       {/* Fondo igual al admin/login */}
       <div
         className="absolute inset-0 -z-20"
@@ -46,7 +46,7 @@ export default function AdminAgentes() {
       <style>{`@keyframes float { 0%{transform:translateY(0)} 50%{transform:translateY(-10px)} 100%{transform:translateY(0)} }`}</style>
 
       <div className="min-h-screen grid place-items-center p-6">
-        <section className="w-full max-w-5xl rounded-2xl border border-white/20 p-10 md:p-14 shadow-[0_20px_60px_rgba(0,0,0,.45)] bg-white/10 backdrop-blur-md text-white">
+        <section className="w-full max-w-5xl rounded-2xl border border-white/20 p-10 md:p-14 shadow-[0_20px_60px_rgba(0,0,0,.45)] bg-white/80 backdrop-blur-md text-black">
           {/* Encabezado */}
           <div className="flex items-center justify-between mb-8">
             <h1 className="text-3xl md:text-4xl font-extrabold uppercase">
@@ -54,19 +54,19 @@ export default function AdminAgentes() {
             </h1>
             <button
               onClick={() => nav("/admin")}
-              className="absolute right-6 top-6 px-5 py-2 rounded-full bg-red-500/90 hover:bg-red-600 font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-white/50"
+              className="absolute right-6 top-6 px-5 py-2 rounded-full bg-red-500/90 hover:bg-red-600 text-white font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-white/50"
             >
               Regresar
             </button>
           </div>
 
           {/* Tabla simple */}
-          <div className="rounded-xl bg-gray-200 p-6 md:p-8">
-            <div className="grid grid-cols-[1fr_auto] items-center px-2 md:px-4 pb-3 text-black-700 font-semibold">
+          <div className="rounded-xl bg-gray-100 p-6 md:p-8 text-black">
+            <div className="grid grid-cols-[1fr_auto] items-center px-2 md:px-4 pb-3 font-semibold text-gray-800">
               <span>Agente:</span>
               <span>Buscas realizadas:</span>
             </div>
-            <ul className="divide-y divide-black/50">
+            <ul className="divide-y divide-gray-400">
               {data.map((a, i) => (
                 <li
                   key={i}
