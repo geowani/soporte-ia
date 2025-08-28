@@ -40,7 +40,7 @@ export default function AdminDashboard({ onLogout }) {
             <h1 className="text-4xl font-extrabold">Administrador</h1>
             <button
               onClick={onLogout}
-              className="font-semibold text-blue-600 hover:underline text-lg"
+              className="font-semibold text-white-600 hover:underline text-lg"
               type="button"
             >
               Salir
@@ -52,7 +52,7 @@ export default function AdminDashboard({ onLogout }) {
             <button
               type="button"
               onClick={() => nav("/admin/agentes")}
-              className="text-blue-600 font-semibold text-left border-b border-black pb-3 text-xl"
+              className="text-white-600 font-semibold text-left border-b border-black pb-3 text-xl"
             >
               Agentes con más búsquedas
             </button>
@@ -60,7 +60,7 @@ export default function AdminDashboard({ onLogout }) {
             <button
               type="button"
              onClick={() => nav("/admin/agregar-caso")}
-            className="text-blue-600 font-semibold text-left border-b border-black pb-3 text-xl"
+            className="text-white-600 font-semibold text-left border-b border-black pb-3 text-xl"
             >
               Agregar caso al sistema
             </button>
@@ -68,7 +68,7 @@ export default function AdminDashboard({ onLogout }) {
             <button
               type="button"
               onClick={() => nav("/admin/sugerencias")}
-              className="text-blue-600 font-semibold text-left border-b border-black pb-3 text-xl"
+              className="text-white-600 font-semibold text-left border-b border-black pb-3 text-xl"
             >
               Revisar las sugerencias
             </button>
@@ -76,7 +76,7 @@ export default function AdminDashboard({ onLogout }) {
             <button
               type="button"
               onClick={() => nav("/admin/historial")}
-              className="text-blue-600 font-semibold text-left border-b border-black pb-3 text-xl"
+              className="text-white-600 font-semibold text-left border-b border-black pb-3 text-xl"
             >
               Historial de casos
             </button>
