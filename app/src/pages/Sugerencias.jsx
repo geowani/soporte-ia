@@ -44,7 +44,7 @@ const onSubmit = (e) => {
             </p>
 
             <form onSubmit={onSubmit} className="flex flex-col items-center gap-4">
-              <label className="w-full max-w-md text-xl font-semibold">Caso</label>
+              <label className="w-full max-w-md text-xl font-semibold">Número de Caso</label>
               <input
                 type="text"
                 inputMode="numeric"
