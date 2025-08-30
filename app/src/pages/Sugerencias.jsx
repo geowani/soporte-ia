@@ -44,12 +44,12 @@ const onSubmit = (e) => {
             </p>
 
             <form onSubmit={onSubmit} className="flex flex-col items-center gap-4">
-              <label className="w-full max-w-md text-xl font-semibold">Número de Caso</label>
+              <label className="w-full max-w-md text-xl font-semibold">Caso</label>
               <input
                 type="text"
                 inputMode="numeric"
                 className="w-full max-w-md rounded-full bg-slate-100 text-slate-900 px-4 py-3 outline-none shadow-inner shadow-black/10 focus:ring-4 ring-cyan-300 text-center tracking-widest"
-                placeholder="Caso"
+                placeholder="Número de Caso"
                 value={caso}
                 onChange={(e) => setCaso(e.target.value)}
               />
