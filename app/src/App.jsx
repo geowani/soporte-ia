@@ -12,6 +12,7 @@ import AdminDashboard from "./pages/AdminDashboard";       // admin home
 import AdminAgentes from "./pages/AdminAgentes";           // /admin/agentes
 import AdminAgregarCaso from "./pages/AdminAgregarCaso";   // /admin/agregar-caso
 import AdminSugerencias from "./pages/AdminSugerencias";   // /admin/sugerencias (NUEVO)
+import AdminHistorial from "./pages/AdminHistorial"
 
 export default function App() {
   const [email, setEmail] = useState("");
@@ -204,6 +205,10 @@ export default function App() {
         path="*"
         element={<Navigate to={role === "admin" ? "/admin" : "/dashboard"} replace />}
       />
+      <Route
+  path="/admin/historial"
+  element={role === "admin" ? <AdminHistorial /> : <Navigate to="/dashboard" replace />}
+/>
     </Routes>
   );
 }
