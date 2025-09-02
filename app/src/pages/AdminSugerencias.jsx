@@ -64,7 +64,7 @@ export default function AdminSugerencias() {
 
           {/* tabla */}
           <div className="rounded-2xl bg-gray-100 p-6 md:p-8 text-black">
-            <div className="grid grid-cols-[1fr_auto] md:grid-cols-[1fr_1fr] items-center px-2 md:px-4 pb-3 font-semibold text-gray-800">
+            <div className="grid grid-cols-[1fr_auto] md:grid-cols-[1fr_1fr] items-center px-2 md:px-4 pb-3 font-bold text-gray-800">
               <span>Casos</span>
               <span className="text-right md:text-left">Agente:</span>
             </div>
