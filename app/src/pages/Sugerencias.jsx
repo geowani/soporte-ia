@@ -5,15 +5,16 @@ export default function Sugerencias() {
   const [caso, setCaso] = useState("");
   const navigate = useNavigate();
 
-const onSubmit = (e) => {
-  e.preventDefault();
-  if (!caso.trim()) return alert("Ingresa el número de caso");
-  // aquí podrías llamar a la API si quieres; por ahora solo navegamos
-  navigate("/confirmacion", { state: { caso } });
-};
+  const onSubmit = (e) => {
+    e.preventDefault();
+    if (!caso.trim()) return alert("Ingresa el número de caso");
+    // aquí podrías llamar a la API si quieres; por ahora solo navegamos
+    navigate("/confirmacion", { state: { caso } });
+  };
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
+      {/* Fondo */}
       <div
         className="absolute inset-0 -z-20"
         style={{
@@ -24,14 +25,18 @@ const onSubmit = (e) => {
         }}
       />
 
-      <button
-        onClick={() => navigate("/dashboard")}
-        className="px-5 py-2 rounded-full bg-red-500/90 hover:bg-red-600 text-white font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-white/50"
-      >
-        REGRESAR
-      </button>
+      {/* Header con botón regresar */}
+      <div className="w-full flex justify-end p-6">
+        <button
+          onClick={() => navigate("/dashboard")}
+          className="px-5 py-2 rounded-full bg-red-500/90 hover:bg-red-600 text-white font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-white/50"
+        >
+          REGRESAR
+        </button>
+      </div>
 
-      <div className="min-h-screen grid place-items-center p-6">
+      {/* Contenido */}
+      <div className="min-h-screen grid place-items-center p-6 -mt-20">
         <section className="w-full max-w-2xl text-center">
           <h1 className="text-3xl sm:text-4xl font-extrabold mb-6">
             SUGERENCIAS DE CASOS
@@ -55,7 +60,7 @@ const onSubmit = (e) => {
               />
               <button
                 type="submit"
-                className="mt-2 w-40 h-11 rounded-xl font-semibold text-[#0b2230]"
+                className="mt-2 w-40 h-11 rounded-xl font-semibold text-white"
                 style={{ backgroundColor: "#59d2e6", boxShadow: "0 8px 22px rgba(89,210,230,.30)" }}
               >
                 Enviar
