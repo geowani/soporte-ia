@@ -8,11 +8,11 @@ export default function AdminHistorial() {
   // 🧪 Mock temporal (esto luego lo cambias por la API real)
   const data = useMemo(
     () => [
-      { id: "0984510", titulo: "SYS || Puerto bloqueado", agregado: "Lester Estrada" },
-      { id: "1089210", titulo: "PC || Instalacion de Chromium", agregado: "Abner Zepeda" },
-      { id: "0841231", titulo: "HW || Impresora toner bajo", agregado: "Jorge Nufio" },
-      { id: "098999",  titulo: "PC || Drive no abre", agregado: "María Romero" },
-      { id: "1058730", titulo: "HW || Error A42.21.10", agregado: "Luis Pacheco" },
+      { id: "0984510", titulo: "SYS || Puerto bloqueado", agregado: "Admin 1" },
+      { id: "1089210", titulo: "PC || Instalacion de Chromium", agregado: "Admin 2" },
+      { id: "0841231", titulo: "HW || Impresora toner bajo", agregado: "Admin 1" },
+      { id: "098999",  titulo: "PC || Drive no abre", agregado: "Admin 2" },
+      { id: "1058730", titulo: "HW || Error A42.21.10", agregado: "Admin 1" },
     ],
     []
   );
