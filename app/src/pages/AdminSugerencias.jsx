@@ -56,7 +56,7 @@ export default function AdminSugerencias() {
             </h1>
             <button
               onClick={() => nav("/admin")}
-              cclassName="px-5 py-2 rounded-full bg-red-500/90 hover:bg-red-600 font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-white/50"
+              className="px-5 py-2 rounded-full bg-red-500/90 hover:bg-red-600 font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-white/50"
             >
               Regresar
             </button>
