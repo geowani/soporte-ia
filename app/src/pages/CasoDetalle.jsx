@@ -107,8 +107,8 @@ export default function CasoDetalle() {
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                 <div className="font-bold text-lg">Caso: {caso.id}</div>
                 <div className="text-right">
-                  <div>Inicio: {fmt(caso.inicio)}</div>
-                  <div>Cierre: {fmt(caso.cierre)}</div>
+                <div><span className="font-bold">Inicio:</span> {fmt(caso.inicio)}</div>
+                <div><span className="font-bold">Cierre:</span> {fmt(caso.cierre)}</div>
                 </div>
               </div>
 
