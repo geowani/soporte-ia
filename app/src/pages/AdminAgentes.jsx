@@ -72,7 +72,7 @@ export default function AdminAgentes() {
                   className="grid grid-cols-[1fr_auto] items-center py-5 px-2 md:px-4"
                 >
                   <span className="text-lg md:text-xl font-normal">{a.nombre}</span>
-                  <span className="text-lg md:text-xl font-bold">{a.busquedas}</span>
+                  <span className="text-lg md:text-xl font-normal">{a.busquedas}</span>
                 </li>
               ))}
             </ul>
