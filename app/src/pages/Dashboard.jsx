@@ -102,7 +102,7 @@ const search = () => {
           <div className="mt-12"> {/* separación extra respecto al buscador */}
             <button
               onClick={() => navigate("/sugerencias")}
-              className="px-6 py-3 rounded-xl font-semibold text-[#0b2230] flex items-center gap-2 mx-auto"
+              className="px-6 py-3 rounded-xl font-extrabold text-white flex items-center gap-2 mx-auto"
               style={{ backgroundColor: "#59d2e6", boxShadow: "0 8px 22px rgba(89,210,230,.30)" }}
               aria-label="Sugerencias"
               title="Sugerencias"
