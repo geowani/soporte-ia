@@ -19,7 +19,7 @@ export default function Confirmacion() {
       {/* Botón regresar */}
       <button
         onClick={() => navigate("/sugerencias")}
-        className="absolute right-6 top-6 text-lg tracking-wide font-semibold hover:opacity-90"
+        className="px-5 py-2 rounded-full bg-red-500/90 hover:bg-red-600 text-white font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-white/50"
       >
         REGRESAR
       </button>
