@@ -167,7 +167,7 @@ export default function AdminAgregarCaso() {
             {/* Botón enviar */}
             <button
               type="submit"
-              className="mt-4 mx-auto w-40 h-11 rounded-xl font-extrabold text-[#0b2230] bg-cyan-400 hover:bg-cyan-500 transition"
+              className="mt-4 mx-auto w-40 h-11 rounded-xl font-extrabold text-white bg-cyan-400 hover:bg-cyan-500 transition"
             >
               Enviar
             </button>
