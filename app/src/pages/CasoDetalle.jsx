@@ -65,7 +65,7 @@ export default function CasoDetalle() {
             if (fromQ) navigate(`/resultados?q=${encodeURIComponent(fromQ)}`);
             else navigate("/resultados");
           }}
-          className="text-white font-semibold tracking-wide hover:opacity-90"
+          className="px-5 py-2 rounded-full bg-red-500/90 hover:bg-red-600 text-white font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-white/50"
         >
           REGRESAR
         </button>
