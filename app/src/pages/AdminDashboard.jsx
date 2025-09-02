@@ -79,7 +79,7 @@ export default function AdminDashboard({ onLogout }) {
               onClick={() => nav("/admin/historial")}
               className="text-white-300 hover:text-white-300 font-semibold text-left border-b border-white/20 pb-3 text-xl transition-transform hover:translate-x-0.5"
             >
-              Historial de casos
+              ULTIMOS CASOS AGREGADOS
             </button>
           </nav>
         </section>
