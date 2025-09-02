@@ -61,7 +61,7 @@ export default function AdminAgentes() {
 
           {/* Tabla */}
           <div className="rounded-xl bg-gray-100 p-6 md:p-8 text-black">
-            <div className="grid grid-cols-[1fr_auto] items-center px-2 md:px-4 pb-3 font-semibold text-gray-800">
+            <div className="grid grid-cols-[1fr_auto] items-center px-2 md:px-4 pb-3 font-bold text-gray-800">
               <span>Agente:</span>
               <span>Buscas realizadas:</span>
             </div>
