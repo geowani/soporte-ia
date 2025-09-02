@@ -74,7 +74,7 @@ export default function AdminSugerencias() {
                   key={i}
                   className="grid grid-cols-[1fr_auto] md:grid-cols-[1fr_1fr] items-center py-5 px-2 md:px-4"
                 >
-                  <span className="text-lg md:text-xl font-semibold">{f.caso}</span>
+                  <span className="text-lg md:text-xl font-normal">{f.caso}</span>
                   <span className="text-lg md:text-xl font-medium md:text-left text-right">
                     {f.agente}
                   </span>
