@@ -117,7 +117,7 @@ export default function App() {
               <button
                 disabled={loading}
                 type="submit"
-                className="mt-2 mx-auto w-40 h-11 rounded-xl font-extrabold text-[#0b2230] transition-transform active:translate-y-0 hover:-translate-y-0.5"
+                className="mt-2 mx-auto w-40 h-11 rounded-xl font-extrabold text-white transition-transform active:translate-y-0 hover:-translate-y-0.5"
                 style={{ backgroundColor: "#59d2e6", boxShadow: "0 8px 22px rgba(89,210,230,.30)" }}
                 onMouseOver={(e)=> e.currentTarget.style.boxShadow = "0 10px 26px rgba(89,210,230,.38)"}
                 onMouseOut={(e)=> e.currentTarget.style.boxShadow = "0 8px 22px rgba(89,210,230,.30)"}
