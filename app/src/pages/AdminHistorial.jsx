@@ -5,7 +5,6 @@ import { useNavigate } from "react-router-dom";
 export default function AdminHistorial() {
   const nav = useNavigate();
 
-  // 🧪 Mock temporal (esto luego lo cambias por la API real)
   const data = useMemo(
     () => [
       { id: "0984510", titulo: "SYS || Puerto bloqueado", agregado: "Admin 1" },
@@ -19,7 +18,7 @@ export default function AdminHistorial() {
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
-      {/* Fondo igual al login/admin */}
+      {/* Fondo */}
       <div
         className="absolute inset-0 -z-20"
         style={{
@@ -43,9 +42,8 @@ export default function AdminHistorial() {
           animation: "float 12s linear infinite",
         }}
       />
-      <style>{`@keyframes float { 0%{transform:translateY(0)} 50%{transform:translateY(-10px)} 100%{transform:translateY(0)} }`}</style>
+      <style>{`@keyframes float {0%{transform:translateY(0)}50%{transform:translateY(-10px)}100%{transform:translateY(0)}}`}</style>
 
-      {/* Contenido */}
       <div className="min-h-screen grid place-items-center p-6">
         <section className="w-full max-w-6xl rounded-2xl border border-white/20 p-10 md:p-14 shadow-[0_20px_60px_rgba(0,0,0,.45)] bg-white/10 backdrop-blur-md">
           {/* Encabezado */}
@@ -63,7 +61,7 @@ export default function AdminHistorial() {
 
           {/* Tabla */}
           <div className="rounded-xl bg-gray-200 text-black p-6 md:p-8">
-            <div className="grid grid-cols-[1fr_2fr_1fr] items-center px-2 md:px-4 pb-3 font-semibold">
+            <div className="grid grid-cols-[1fr_2fr_1fr] items-center px-2 md:px-4 pb-3 font-bold">
               <span>Casos</span>
               <span>Título</span>
               <span>Agregado por</span>
@@ -74,7 +72,7 @@ export default function AdminHistorial() {
                   key={i}
                   className="grid grid-cols-[1fr_2fr_1fr] items-center py-4 px-2 md:px-4"
                 >
-                  <span className="font-bold">{c.id}</span>
+                  <span className="font-normal">{c.id}</span> {/* 👈 ahora normal */}
                   <span>{c.titulo}</span>
                   <span>{c.agregado}</span>
                 </li>
