@@ -12,16 +12,20 @@ module.exports = async function (context, req) {
   try {
     const pool = await sql.connect(config);
     const r1 = await pool.request().query('SELECT 1 AS ok');
-    const r2 = await pool.request().query('SELECT COUNT(*) AS usuarios FROM dbo.usuario');
-    context.res = { status: 200, body: {
-      ok: true,
-      sqlserver: process.env.SQLSERVER,
-      db: process.env.SQLDB,
-      ping: r1.recordset[0],
-      usuarios: r2.recordset[0].usuarios
-    }};
+    const r2 = await pool.request().query('SELECT COUNT(*) AS total_usuarios FROM dbo.usuario');
+    context.res = {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: {
+        ok: true,
+        sqlserver: process.env.SQLSERVER,
+        db: process.env.SQLDB,
+        ping: r1.recordset[0],
+        total_usuarios: r2.recordset[0].total_usuarios
+      }
+    };
   } catch (e) {
     context.log.error(e);
-    context.res = { status: 500, body: { ok:false, error: e.message } };
+    context.res = { status: 500, body: { ok: false, error: e.message } };
   }
 };
