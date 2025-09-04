@@ -1,50 +1,55 @@
-// api/Login/index.js
+const sql = require('mssql');
+
+const config = {
+  user: process.env.SQLUSER,
+  password: process.env.SQLPASS,
+  server: process.env.SQLSERVER,
+  database: process.env.SQLDB,
+  options: { encrypt: true, trustServerCertificate: false }
+};
+
 module.exports = async function (context, req) {
-  // Preflight simple
   if (req.method === 'OPTIONS') {
     context.res = { status: 204 };
     return;
   }
 
-  const ct = (req.headers['content-type'] || '').toLowerCase();
-  let email = '', password = '';
+  let email = (req.body?.email || '').toLowerCase().trim();
+  let password = req.body?.password || '';
 
   try {
-    if (ct.includes('application/json')) {
-      const body = req.body || {};
-      email = (body.email || '').toLowerCase().trim();
-      password = body.password || '';
-    } else if (ct.includes('application/x-www-form-urlencoded')) {
-      const p = new URLSearchParams(req.body || '');
-      email = (p.get('email') || '').toLowerCase().trim();
-      password = p.get('password') || '';
+    const pool = await sql.connect(config);
+    const result = await pool.request()
+      .input('correo', sql.VarChar(160), email)
+      .input('pwd', sql.VarChar(200), password)
+      .query(`
+        SELECT id_usuario, nombre_completo, correo, rol
+        FROM dbo.usuario
+        WHERE correo = @correo
+          AND contrasena_hash = CONVERT(varchar(64), HASHBYTES('SHA2_256', @pwd), 2)
+          AND activo = 1;
+      `);
+
+    if (result.recordset.length > 0) {
+      const u = result.recordset[0];
+      context.res = {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: { ok: true, message: 'Inicio de sesión exitoso', email: u.correo, role: u.rol }
+      };
+    } else {
+      context.res = {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+        body: { ok: false, message: 'Correo o contraseña inválidos' }
+      };
     }
-  } catch (e) { /* ignore parse errors */ }
-
-  // ---- Usuarios mock con roles ----
-  const users = [
-    { email: 'demo@empresa.com',  password: '123456', role: 'user'  },
-    { email: 'admin@empresa.com', password: '123456', role: 'admin' }
-  ];
-
-  const user = users.find(u => u.email === email && u.password === password);
-
-  if (user) {
+  } catch (err) {
+    context.log.error('DB error:', err);
     context.res = {
-      status: 200,
+      status: 500,
       headers: { 'Content-Type': 'application/json' },
-      body: {
-        ok: true,
-        message: 'Inicio de sesión exitoso',
-        email: user.email,
-        role: user.role
-      }
-    };
-  } else {
-    context.res = {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-      body: { ok: false, message: 'Correo o contraseña inválidos' }
+      body: { ok: false, message: 'Error interno en el servidor' }
     };
   }
 };
