@@ -2,7 +2,6 @@
 const { getPool, sql } = require('../_db');
 
 function getAllowedStates() {
-  // Tu tabla permite: pending, approved, rejected
   const raw = process.env.SUG_ESTADOS || 'pending,approved,rejected';
   return raw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 }
@@ -25,35 +24,46 @@ module.exports = async function (context, req) {
       return;
     }
 
-    // --- candidatos básicos: body, header, cookie, env
     const cookieStr = req.headers.cookie || '';
     const cookieAgent = (/(?:^|;\s*)agent_id=(\d+)/.exec(cookieStr) || [])[1];
-
-    let agenteId = firstValidInt([
-      body.agenteId,
-      req.headers['x-agent-id'],
-      cookieAgent,
-      process.env.SUG_AGENTE_DEFAULT
-    ]);
-
-    // --- NUEVO: correo para resolver el id del usuario logueado
-    const userEmail = String(req.headers['x-user-email'] || '').trim().toLowerCase();
+    const headerAgent = req.headers['x-agent-id'];
+    const headerEmail = String(req.headers['x-user-email'] || '').trim().toLowerCase();
 
     const pool = await getPool();
 
-    // Si viene correo, resolvemos SIEMPRE por correo y priorizamos ese id
-    // (así evitamos que se quede un agentId viejo del cliente).
-    if (userEmail) {
-      const rs = await pool.request()
-        .input('correo', sql.NVarChar(256), userEmail)
-        .query('SELECT TOP 1 id_usuario FROM dbo.usuario WHERE correo = @correo AND activo = 1;');
+    let agenteId = null;
+    let source = null;
 
-      if (rs.recordset.length) {
-        agenteId = rs.recordset[0].id_usuario;
-        context.log(`agenteId resuelto por correo (${userEmail}) => ${agenteId}`);
-      } else {
-        context.log(`correo ${userEmail} no encontrado/activo en dbo.usuario`);
+    // 1) Si llega correo, SIEMPRE intentamos resolver por correo (y error si no existe)
+    if (headerEmail) {
+      const rs = await pool.request()
+        .input('correo', sql.NVarChar(256), headerEmail)
+        .query(`
+          SELECT TOP 1 id_usuario
+          FROM dbo.usuario
+          WHERE LTRIM(RTRIM(LOWER(correo))) = @correo AND activo = 1;
+        `);
+
+      if (!rs.recordset.length) {
+        context.res = {
+          status: 400,
+          body: { error: 'Correo no encontrado o inactivo', correo: headerEmail }
+        };
+        return;
       }
+
+      agenteId = rs.recordset[0].id_usuario;
+      source = 'email';
+      context.log(`agenteId por correo (${headerEmail}) => ${agenteId}`);
+    } else {
+      // 2) Sin correo: usamos body/header/cookie/env (como antes)
+      agenteId = firstValidInt([
+        body.agenteId,
+        headerAgent,
+        cookieAgent,
+        process.env.SUG_AGENTE_DEFAULT
+      ]);
+      source = agenteId ? 'id' : null;
     }
 
     if (!agenteId) {
@@ -73,7 +83,7 @@ module.exports = async function (context, req) {
     }
 
     const insert = await pool.request()
-      .input('numeroCaso', sql.NVarChar(50), numeroCaso)   // ajusta la longitud si tu columna es más corta/larga
+      .input('numeroCaso', sql.NVarChar(50), numeroCaso)
       .input('agenteId',  sql.Int, agenteId)
       .input('estado',    sql.NVarChar(50), estado)
       .input('notas',     sql.NVarChar(sql.MAX), String(body.notas || ''))
@@ -91,7 +101,15 @@ module.exports = async function (context, req) {
       FROM dbo.sugerencia WHERE id_sugerencia = @id
     `);
 
-    context.res = { status: 201, body: { id, row: just.recordset[0] } };
+    context.res = {
+      status: 201,
+      body: {
+        id,
+        row: just.recordset[0],
+        resolvedAgenteId: agenteId,
+        source // 'email' o 'id'
+      }
+    };
   } catch (err) {
     context.log.error('POST /sugerencias ERROR:', err);
     context.res = { status: 500, body: { error: 'Error creando sugerencia', detail: String(err?.message || err) } };

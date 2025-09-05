@@ -18,7 +18,7 @@ function getAgentId() {
   return 0;
 }
 
-// Detectar el correo del usuario para que el backend pueda resolver el id si hace falta
+// Correo del usuario para que el backend pueda resolver id si hace falta
 function getUserEmail() {
   try {
     const raw = localStorage.getItem("user") || localStorage.getItem("usuario") || "";
@@ -28,7 +28,6 @@ function getUserEmail() {
       if (u?.email) return String(u.email).toLowerCase();
     }
   } catch {}
-  // (opcional) si algún día guardas cookie con email
   const m = document.cookie.match(/(?:^|;\s*)user_email=([^;]+)/);
   if (m) return decodeURIComponent(m[1]).toLowerCase();
   return "";
@@ -46,14 +45,12 @@ export default function Sugerencias() {
     const agentId = getAgentId();
     const userEmail = getUserEmail();
 
-    // Requerimos al menos uno: id o email
     if (!agentId && !userEmail) {
       alert("Sesión no válida. Inicia sesión de nuevo.");
-      navigate("/"); // o a tu ruta de login
+      navigate("/");
       return;
     }
 
-    // Payload: incluye agenteId si lo tenemos
     const payload = {
       numeroCaso: caso.trim(),
       ...(agentId ? { agenteId: agentId } : {})
@@ -67,6 +64,8 @@ export default function Sugerencias() {
         ...(agentId ? { "x-agent-id": String(agentId) } : {}),
         ...(userEmail ? { "x-user-email": userEmail } : {})
       };
+
+      console.debug("[SUG:submit] payload:", payload, "headers:", headers);
 
       const res = await fetch("/api/sugerencias", {
         method: "POST",
@@ -120,7 +119,7 @@ export default function Sugerencias() {
         <section className="w-full max-w-2xl text-center">
           <h1 className="text-3xl sm:text-4xl font-extrabold mb-6">SUGERENCIAS DE CASOS</h1>
 
-        <div className="mx-auto w-full rounded-2xl bg-black/30 backdrop-blur-md p-6 sm:p-8 border border-white/15 shadow-[0_20px_60px_rgba(0,0,0,.45)]">
+          <div className="mx-auto w-full rounded-2xl bg-black/30 backdrop-blur-md p-6 sm:p-8 border border-white/15 shadow-[0_20px_60px_rgba(0,0,0,.45)]">
             <p className="text-slate-200 leading-relaxed mb-6">
               En este espacio puedes sugerir la inclusión de casos repetitivos que aún no hayan sido agregados
             </p>
