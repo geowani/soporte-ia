@@ -20,40 +20,60 @@ module.exports = async function (context, req) {
     const body = req.body || {};
     const numeroCaso = String(body.numeroCaso || '').trim();
 
-    // lee de cookie agent_id=7
-    const cookieStr = req.headers.cookie || '';
-    const cookieAgent = (/(?:^|;\s*)agent_id=(\d+)/.exec(cookieStr) || [])[1];
-
-    // candidatos: body, header, cookie, env, fallback 1
-    const agenteId = firstValidInt([
-      body.agenteId,
-      req.headers['x-agent-id'],
-      cookieAgent,
-      process.env.SUG_AGENTE_DEFAULT,
-      1
-    ]);
-
     if (!numeroCaso) {
       context.res = { status: 400, body: { error: 'numeroCaso es requerido' } };
       return;
     }
+
+    // --- candidatos básicos: body, header, cookie, env
+    const cookieStr = req.headers.cookie || '';
+    const cookieAgent = (/(?:^|;\s*)agent_id=(\d+)/.exec(cookieStr) || [])[1];
+
+    let agenteId = firstValidInt([
+      body.agenteId,
+      req.headers['x-agent-id'],
+      cookieAgent,
+      process.env.SUG_AGENTE_DEFAULT
+    ]);
+
+    // --- NUEVO: correo para resolver el id del usuario logueado
+    const userEmail = String(req.headers['x-user-email'] || '').trim().toLowerCase();
+
+    const pool = await getPool();
+
+    // Si viene correo, resolvemos SIEMPRE por correo y priorizamos ese id
+    // (así evitamos que se quede un agentId viejo del cliente).
+    if (userEmail) {
+      const rs = await pool.request()
+        .input('correo', sql.NVarChar(256), userEmail)
+        .query('SELECT TOP 1 id_usuario FROM dbo.usuario WHERE correo = @correo AND activo = 1;');
+
+      if (rs.recordset.length) {
+        agenteId = rs.recordset[0].id_usuario;
+        context.log(`agenteId resuelto por correo (${userEmail}) => ${agenteId}`);
+      } else {
+        context.log(`correo ${userEmail} no encontrado/activo en dbo.usuario`);
+      }
+    }
+
     if (!agenteId) {
-      context.res = { status: 400, body: { error: 'No se pudo determinar agenteId (envía header x-agent-id o configura SUG_AGENTE_DEFAULT)' } };
+      context.res = {
+        status: 400,
+        body: { error: 'No se pudo determinar agenteId (envía x-user-email o x-agent-id / configura SUG_AGENTE_DEFAULT)' }
+      };
       return;
     }
 
     const allowed = getAllowedStates();
-    const estadoDefault = (process.env.SUG_ESTADO_DEFAULT || 'pending').toLowerCase();
+    const estadoDefault = (process.env.SUG_ESTADO_DEFAULT || allowed[0] || 'pending').toLowerCase();
     const estado = String(body.estado || estadoDefault).toLowerCase();
     if (!allowed.includes(estado)) {
       context.res = { status: 400, body: { error: 'estado inválido', detalle: { recibido: estado, permitidos: allowed } } };
       return;
     }
 
-    const pool = await getPool();
-
     const insert = await pool.request()
-      .input('numeroCaso', sql.NVarChar(50), numeroCaso)   // ajusta 50 si tu columna es más corta
+      .input('numeroCaso', sql.NVarChar(50), numeroCaso)   // ajusta la longitud si tu columna es más corta/larga
       .input('agenteId',  sql.Int, agenteId)
       .input('estado',    sql.NVarChar(50), estado)
       .input('notas',     sql.NVarChar(sql.MAX), String(body.notas || ''))
