@@ -2,5 +2,15 @@
   "navigationFallback": {
     "rewrite": "/index.html",
     "exclude": ["/api/*"]
+  },
+  "routes": [
+    {
+      "route": "/api/*",
+      "allowedRoles": ["anonymous"]
+    }
+  ],
+  "responseOverrides": {
+    "401": { "statusCode": 200, "redirect": "/index.html" },
+    "404": { "rewrite": "/index.html" }
   }
 }

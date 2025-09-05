@@ -1,0 +1,23 @@
+<!-- app/src/app/pages/sugerencias/sugerencias.component.html -->
+<h2>Sugerencias</h2>
+
+<input [(ngModel)]="term" placeholder="Buscar..." />
+<button (click)="buscar()">Buscar</button>
+
+<div *ngIf="cargando">Cargando...</div>
+<div *ngIf="error">{{error}}</div>
+
+<form (ngSubmit)="crear()">
+  <input [(ngModel)]="creando.titulo" name="titulo" placeholder="Título" required />
+  <textarea [(ngModel)]="creando.descripcion" name="descripcion" placeholder="Descripción" required></textarea>
+  <button type="submit">Crear</button>
+</form>
+
+<ul>
+  <li *ngFor="let s of lista">
+    <strong>{{s.titulo}}</strong>
+    <div>{{s.descripcion}}</div>
+    <small>{{s.estado}} · {{s.fechaCreacion | date:'short'}}</small>
+    <button (click)="marcarResuelta(s)" *ngIf="s.estado!=='RESUELTA'">Marcar resuelta</button>
+  </li>
+</ul>
