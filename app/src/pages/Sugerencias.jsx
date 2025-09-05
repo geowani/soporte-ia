@@ -1,27 +1,21 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-// === helper: detectar el agente actual sin JWT (localStorage / objeto user / cookie) ===
+// Detectar el agente (sin JWT)
 function getAgentId() {
   const a = localStorage.getItem("agentId");
   if (a && Number(a) > 0) return Number(a);
-
   try {
     const raw = localStorage.getItem("user") || localStorage.getItem("usuario") || "";
     if (raw) {
       const u = JSON.parse(raw);
-      const cands = [u.id, u.agente_id, u.id_usuario, u.userId, u.agentId];
-      for (const v of cands) {
-        const n = Number(v);
-        if (Number.isInteger(n) && n > 0) return n;
-      }
+      const cands = [u.id_usuario, u.id, u.agente_id, u.userId, u.agentId];
+      for (const v of cands) { const n = Number(v); if (Number.isInteger(n) && n > 0) return n; }
     }
   } catch {}
-
-  const m = document.cookie.match(/(?:^|;\\s*)agent_id=(\\d+)/);
+  const m = document.cookie.match(/(?:^|;\s*)agent_id=(\d+)/);
   if (m && Number(m[1]) > 0) return Number(m[1]);
-
-  return 0; // el backend aún tiene SUG_AGENTE_DEFAULT como respaldo
+  return 0;
 }
 
 export default function Sugerencias() {
@@ -33,19 +27,23 @@ export default function Sugerencias() {
     e.preventDefault();
     if (!caso.trim()) return alert("Ingresa el número de caso");
 
-    // 1) preparar payload y encabezado con el agente
-    const payload = { numeroCaso: caso.trim() };
     const agentId = getAgentId();
+    if (!agentId) {
+      alert("Sesión no válida. Vuelve a iniciar sesión.");
+      navigate("/"); // o a tu ruta de login
+      return;
+    }
+
+    const payload = { numeroCaso: caso.trim(), agenteId: agentId };
 
     try {
       setSending(true);
 
-      // 2) enviar a tu Function (POST /api/sugerencias)
       const res = await fetch("/api/sugerencias", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-agent-id": String(agentId || "") // el backend lo toma de aquí
+          "x-agent-id": String(agentId) // redundante pero útil para debug
         },
         body: JSON.stringify(payload),
         credentials: "same-origin"
@@ -55,13 +53,14 @@ export default function Sugerencias() {
       console.debug("[POST /api/sugerencias]", res.status, txt);
       if (!res.ok) throw new Error(`HTTP ${res.status} - ${txt}`);
 
-      // 3) parsear para obtener el id insertado (si viene)
       let body = {};
       try { body = txt ? JSON.parse(txt) : {}; } catch {}
-      const nuevoId =
-        body?.id ?? body?.row?.id ?? null;
+      const nuevoId = body?.id ?? body?.row?.id ?? null;
 
-      // 4) navegar a tu confirmación como antes, pero pasando también el id
+      // Fallback si recargan confirmación
+      sessionStorage.setItem("last_sug_case", payload.numeroCaso);
+      if (nuevoId) sessionStorage.setItem("last_sug_id", String(nuevoId));
+
       navigate("/confirmacion", { state: { caso: payload.numeroCaso, id: nuevoId } });
     } catch (err) {
       console.error(err);
@@ -73,7 +72,6 @@ export default function Sugerencias() {
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
-      {/* Fondo */}
       <div
         className="absolute inset-0 -z-20"
         style={{
@@ -83,8 +81,6 @@ export default function Sugerencias() {
           backgroundRepeat: "no-repeat",
         }}
       />
-
-      {/* Header con botón regresar */}
       <div className="w-full flex justify-end p-6">
         <button
           onClick={() => navigate("/dashboard")}
@@ -94,20 +90,15 @@ export default function Sugerencias() {
         </button>
       </div>
 
-      {/* Contenido */}
       <div className="min-h-screen grid place-items-center p-6 -mt-20">
         <section className="w-full max-w-2xl text-center">
-          <h1 className="text-3xl sm:text-4xl font-extrabold mb-6">
-            SUGERENCIAS DE CASOS
-          </h1>
+          <h1 className="text-3xl sm:text-4xl font-extrabold mb-6">SUGERENCIAS DE CASOS</h1>
 
           <div className="mx-auto w-full rounded-2xl bg-black/30 backdrop-blur-md p-6 sm:p-8 border border-white/15 shadow-[0_20px_60px_rgba(0,0,0,.45)]">
             <p className="text-slate-200 leading-relaxed mb-6">
-              En este espacio puedes sugerir la inclusión de casos repetitivos
-              que aún no hayan sido agregados
+              En este espacio puedes sugerir la inclusión de casos repetitivos que aún no hayan sido agregados
             </p>
 
-            {/* IMPORTANTE: submit controlado, sin navegación clásica hasta que termine el fetch */}
             <form onSubmit={onSubmit} className="flex flex-col items-center gap-4">
               <label className="w-full max-w-md text-xl font-semibold">Caso</label>
               <input
