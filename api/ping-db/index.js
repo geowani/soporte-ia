@@ -5,10 +5,10 @@ module.exports = async function (context, req) {
   try {
     const envSnapshot = {
       has_DB_CONN: !!process.env.DB_CONN,
-      DB_SERVER: process.env.DB_SERVER || null,
-      DB_NAME: process.env.DB_NAME || null,
-      DB_USER: process.env.DB_USER ? '(set)' : null,
-      DB_PASSWORD: process.env.DB_PASSWORD ? '(set)' : null
+      DB_SERVER: process.env.DB_SERVER || genpactis.database.windows.net,
+      DB_NAME: process.env.DB_NAME || genpactcasos,
+      DB_USER: process.env.DB_USER ? '(set)' : sqladmin,
+      DB_PASSWORD: process.env.DB_PASSWORD ? '(set)' : Mundodepiedra10
     };
 
     const miss = missingEnv();
