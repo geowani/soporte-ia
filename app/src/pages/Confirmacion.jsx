@@ -1,7 +1,14 @@
-import { useNavigate } from "react-router-dom";
+// app/src/pages/Confirmacion.jsx
+import { useLocation, useNavigate } from "react-router-dom";
 
 export default function Confirmacion() {
   const navigate = useNavigate();
+  const { state } = useLocation() || {};
+
+  // mostramos lo que vino por state; si se refresca la página,
+  // tomamos el último valor guardado en sessionStorage
+  const caso = state?.caso ?? sessionStorage.getItem("last_sug_case") ?? "";
+  const id   = state?.id   ?? sessionStorage.getItem("last_sug_id")   ?? "";
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
@@ -16,7 +23,7 @@ export default function Confirmacion() {
         }}
       />
 
-      {/* Botón regresar (posicionado a la derecha) */}
+      {/* Botón regresar */}
       <button
         onClick={() => navigate("/sugerencias")}
         className="absolute right-6 top-6 px-5 py-2 rounded-full bg-red-500/90 hover:bg-red-600 text-white font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-white/50"
@@ -32,9 +39,17 @@ export default function Confirmacion() {
 
           <div className="mx-auto w-full rounded-2xl bg-black/30 backdrop-blur-md p-6 sm:p-8 border border-white/15 shadow-[0_20px_60px_rgba(0,0,0,.45)]">
             <p className="text-slate-200 leading-relaxed mb-6">
-              Muchas gracias por tu sugerencia.  
-              La tendremos en cuenta y estará bajo revisión
+              Muchas gracias por tu sugerencia. La tendremos en cuenta y estará bajo revisión.
             </p>
+
+            <div className="text-xl sm:text-2xl mb-2">
+              {caso ? <>Caso sugerido: <b>{caso}</b></> : <i>Sin número de caso</i>}
+            </div>
+            {id && (
+              <div className="text-sm text-slate-200 mb-4">
+                ID de registro: <b>{id}</b>
+              </div>
+            )}
 
             <div className="text-5xl">✅</div>
           </div>

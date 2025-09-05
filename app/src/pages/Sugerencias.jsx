@@ -1,186 +1,135 @@
-// src/pages/Sugerencias.jsx
-import React, { useEffect, useState } from 'react';
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
-const ESTADO_LABEL = { pending: 'Pendiente', approved: 'Aprobada', rejected: 'Rechazada' };
-
+// === helper: detectar el agente actual sin JWT (localStorage / objeto user / cookie) ===
 function getAgentId() {
-  const a = localStorage.getItem('agentId');
+  const a = localStorage.getItem("agentId");
   if (a && Number(a) > 0) return Number(a);
+
   try {
-    const raw = localStorage.getItem('user') || localStorage.getItem('usuario') || '';
+    const raw = localStorage.getItem("user") || localStorage.getItem("usuario") || "";
     if (raw) {
       const u = JSON.parse(raw);
       const cands = [u.id, u.agente_id, u.id_usuario, u.userId, u.agentId];
-      for (const v of cands) { const n = Number(v); if (Number.isInteger(n) && n > 0) return n; }
+      for (const v of cands) {
+        const n = Number(v);
+        if (Number.isInteger(n) && n > 0) return n;
+      }
     }
   } catch {}
-  const m = document.cookie.match(/(?:^|;\s*)agent_id=(\d+)/);
+
+  const m = document.cookie.match(/(?:^|;\\s*)agent_id=(\\d+)/);
   if (m && Number(m[1]) > 0) return Number(m[1]);
-  return 0;
+
+  return 0; // el backend aún tiene SUG_AGENTE_DEFAULT como respaldo
 }
 
-export default function SugerenciasPage() {
-  const [term, setTerm] = useState('');
-  const [top, setTop] = useState(20);
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState('');
-  const [numeroCaso, setNumeroCaso] = useState('');
+export default function Sugerencias() {
+  const [caso, setCaso] = useState("");
   const [sending, setSending] = useState(false);
+  const navigate = useNavigate();
 
-  async function listar() {
-    try {
-      setLoading(true); setErr('');
-      const url = `/api/sugerencias?term=${encodeURIComponent(term)}&top=${encodeURIComponent(top)}`;
-      const res = await fetch(url);
-      const txt = await res.text();
-      console.debug('[GET /api/sugerencias]', res.status, txt);
-      if (!res.ok) throw new Error(`HTTP ${res.status} - ${txt}`);
-      const data = txt ? JSON.parse(txt) : [];
-      setItems(Array.isArray(data) ? data : []);
-    } catch (e) {
-      console.error(e); setErr('No se pudo cargar la lista');
-    } finally { setLoading(false); }
-  }
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    if (!caso.trim()) return alert("Ingresa el número de caso");
 
-  async function crear(e) {
-    e?.preventDefault?.();
-    e?.stopPropagation?.();
-    setErr('');
-
-    const payload = { numeroCaso: String(numeroCaso || '').trim() };
-    if (!payload.numeroCaso) { setErr('Ingresa el número de caso'); return; }
-
+    // 1) preparar payload y encabezado con el agente
+    const payload = { numeroCaso: caso.trim() };
     const agentId = getAgentId();
-    console.debug('[POST payload]', payload, 'agentId:', agentId);
 
     try {
       setSending(true);
-      const res = await fetch('/api/sugerencias', {
-        method: 'POST',
+
+      // 2) enviar a tu Function (POST /api/sugerencias)
+      const res = await fetch("/api/sugerencias", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'x-agent-id': String(agentId || '')
+          "Content-Type": "application/json",
+          "x-agent-id": String(agentId || "") // el backend lo toma de aquí
         },
         body: JSON.stringify(payload),
-        // evita que algún polyfill intente enviar credenciales raras
-        credentials: 'same-origin'
+        credentials: "same-origin"
       });
 
       const txt = await res.text();
-      console.debug('[POST /api/sugerencias] status:', res.status, 'body:', txt);
+      console.debug("[POST /api/sugerencias]", res.status, txt);
       if (!res.ok) throw new Error(`HTTP ${res.status} - ${txt}`);
 
+      // 3) parsear para obtener el id insertado (si viene)
       let body = {};
       try { body = txt ? JSON.parse(txt) : {}; } catch {}
-      setNumeroCaso('');
-      await listar();
+      const nuevoId =
+        body?.id ?? body?.row?.id ?? null;
 
-      const idMostrado = body?.id ?? body?.row?.id ?? '(sin id)';
-      alert(`¡Sugerencia enviada!\nID: ${idMostrado}\nCaso: ${payload.numeroCaso}`);
-    } catch (e) {
-      console.error(e);
-      setErr('No se pudo crear la sugerencia');
-      alert(String(e));
+      // 4) navegar a tu confirmación como antes, pero pasando también el id
+      navigate("/confirmacion", { state: { caso: payload.numeroCaso, id: nuevoId } });
+    } catch (err) {
+      console.error(err);
+      alert(`No se pudo enviar la sugerencia.\n${String(err)}`);
     } finally {
       setSending(false);
     }
-  }
-
-  async function actualizarEstado(id, nuevoEstado, nuevasNotas) {
-    try {
-      setErr('');
-      const res = await fetch(`/api/sugerencias/${id}/estado`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          estado: String(nuevoEstado).toLowerCase(),
-          ...(nuevasNotas ? { notas: nuevasNotas } : {})
-        })
-      });
-      const txt = await res.text();
-      console.debug('[PATCH /api/sugerencias/:id/estado]', res.status, txt);
-      if (!res.ok) throw new Error(`HTTP ${res.status} - ${txt}`);
-      await listar();
-    } catch (e) {
-      console.error(e); setErr('No se pudo actualizar el estado'); alert(String(e));
-    }
-  }
-
-  useEffect(() => { listar(); }, []);
+  };
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto', padding: 16 }}>
-      <h2>Sugerencias</h2>
+    <main className="min-h-screen w-full relative overflow-hidden text-white">
+      {/* Fondo */}
+      <div
+        className="absolute inset-0 -z-20"
+        style={{
+          backgroundImage: "url('/fondo.jpg')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+        }}
+      />
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16 }}>
-        <input
-          placeholder="Buscar por número de caso o notas…"
-          value={term}
-          onChange={(e) => setTerm(e.target.value)}
-        />
-        <input
-          type="number"
-          min={1}
-          max={50}
-          value={top}
-          onChange={(e) => setTop(parseInt(e.target.value || '20', 10))}
-          style={{ width: 80 }}
-          title="TOP N"
-        />
-        <button onClick={listar}>Buscar</button>
+      {/* Header con botón regresar */}
+      <div className="w-full flex justify-end p-6">
+        <button
+          onClick={() => navigate("/dashboard")}
+          className="px-5 py-2 rounded-full bg-red-500/90 hover:bg-red-600 text-white font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-white/50"
+        >
+          REGRESAR
+        </button>
       </div>
 
-      {/* Quitamos submit clásico: usamos botón type="button" */}
-      <form onSubmit={(e)=>{e.preventDefault();}} style={{ display: 'grid', gap: 8, marginBottom: 24 }}>
-        <h3>Crear sugerencia</h3>
-        <input
-          id="numeroCaso"
-          name="numeroCaso"
-          placeholder="Número de caso"
-          value={numeroCaso}
-          onChange={(e) => setNumeroCaso(e.target.value)}
-          required
-        />
-        <button
-          id="btnEnviar"
-          type="button"
-          disabled={sending}
-          onClick={crear}
-        >
-          {sending ? 'Enviando…' : 'Enviar'}
-        </button>
-      </form>
+      {/* Contenido */}
+      <div className="min-h-screen grid place-items-center p-6 -mt-20">
+        <section className="w-full max-w-2xl text-center">
+          <h1 className="text-3xl sm:text-4xl font-extrabold mb-6">
+            SUGERENCIAS DE CASOS
+          </h1>
 
-      {loading && <div>Cargando…</div>}
-      {err && <div style={{ color: 'crimson' }}>{err}</div>}
+          <div className="mx-auto w-full rounded-2xl bg-black/30 backdrop-blur-md p-6 sm:p-8 border border-white/15 shadow-[0_20px_60px_rgba(0,0,0,.45)]">
+            <p className="text-slate-200 leading-relaxed mb-6">
+              En este espacio puedes sugerir la inclusión de casos repetitivos
+              que aún no hayan sido agregados
+            </p>
 
-      <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: 12 }}>
-        {items.map((sug) => (
-          <li key={sug.id} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-              <strong>#{sug.id} · Caso: {sug.numeroCaso}</strong>
-              <small>{new Date(sug.creadoEn).toLocaleString()}</small>
-            </div>
-            <div style={{ marginTop: 4 }}>
-              <b>Agente:</b> {sug.agenteId} · <b>Estado:</b> {ESTADO_LABEL[sug.estado] || sug.estado}
-            </div>
-            {sug.notas && <div style={{ marginTop: 4 }}>{sug.notas}</div>}
-
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              {sug.estado !== 'approved' && (
-                <button onClick={() => actualizarEstado(sug.id, 'approved')}>Aprobar</button>
-              )}
-              {sug.estado !== 'rejected' && (
-                <button onClick={() => actualizarEstado(sug.id, 'rejected')}>Rechazar</button>
-              )}
-              {sug.estado !== 'pending' && (
-                <button onClick={() => actualizarEstado(sug.id, 'pending')}>Marcar pendiente</button>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
+            {/* IMPORTANTE: submit controlado, sin navegación clásica hasta que termine el fetch */}
+            <form onSubmit={onSubmit} className="flex flex-col items-center gap-4">
+              <label className="w-full max-w-md text-xl font-semibold">Caso</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                className="w-full max-w-md rounded-full bg-slate-100 text-slate-900 px-4 py-3 outline-none shadow-inner shadow-black/10 focus:ring-4 ring-cyan-300 text-center tracking-widest"
+                placeholder="Número de Caso"
+                value={caso}
+                onChange={(e) => setCaso(e.target.value)}
+              />
+              <button
+                type="submit"
+                disabled={sending}
+                className="mt-2 w-40 h-11 rounded-xl font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed"
+                style={{ backgroundColor: "#59d2e6", boxShadow: "0 8px 22px rgba(89,210,230,.30)" }}
+              >
+                {sending ? "Enviando…" : "Enviar"}
+              </button>
+            </form>
+          </div>
+        </section>
+      </div>
+    </main>
   );
 }
