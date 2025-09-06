@@ -29,57 +29,66 @@ module.exports = async function (context, req) {
     return;
   }
 
-  // ---------------- GET: listar con JOIN (trae agenteNombre) ----------------
-  if (req.method === 'GET') {
-    try {
-      const pool = await getPool();
+// ---------- GET: listar sugerencias ----------
+if (req.method === 'GET') {
+  try {
+    const pool = await getPool();
 
-      const top = Math.min(Math.max(parseInt(req.query.top || '50', 10), 1), 200);
-      const term = String(req.query.term || '').trim();
-      const estado = String(req.query.estado || '').trim().toLowerCase();
-      const agenteIdQ = Number(req.query.agenteId || 0);
+    const top = Math.min(Math.max(parseInt(req.query.top || '50', 10), 1), 200);
+    const term = String(req.query.term || '').trim();
+    const estado = String(req.query.estado || '').trim().toLowerCase();
+    const agenteIdQ = Number(req.query.agenteId || 0);
 
-      const q = pool.request().input('top', sql.Int, top);
-      let where = '1=1';
+    // NEW: dirección de orden
+    const sort = String(req.query.sort || 'asc').toLowerCase(); // 'asc' | 'desc'
+    const dir = (sort === 'desc') ? 'DESC' : 'ASC';             // default: ASC (viejo -> reciente)
 
-      if (term) {
-        q.input('term', sql.NVarChar(100), `%${term}%`);
-        where += ' AND (s.numero_caso LIKE @term OR s.notas LIKE @term)';
-      }
-      if (estado) {
-        q.input('estado', sql.NVarChar(50), estado);
-        where += ' AND s.estado = @estado';
-      }
-      if (Number.isInteger(agenteIdQ) && agenteIdQ > 0) {
-        q.input('agenteId', sql.Int, agenteIdQ);
-        where += ' AND s.agente_id = @agenteId';
-      }
+    const q = pool.request().input('top', sql.Int, top);
+    let where = '1=1';
 
-      const rs = await q.query(`
-        SELECT TOP (@top)
-          s.id_sugerencia               AS id,
-          s.numero_caso                 AS numeroCaso,
-          s.agente_id                   AS agenteId,
-          ISNULL(u.nombre_completo,'')  AS agenteNombre,
-          ISNULL(u.correo,'')           AS agenteEmail,
-          s.estado,
-          s.notas,
-          s.creado_en                   AS creadoEn
-        FROM dbo.sugerencia s
-        LEFT JOIN dbo.usuario u
-          ON u.id_usuario = s.agente_id
-        WHERE ${where}
-        ORDER BY s.creado_en DESC;
-      `);
-
-      context.res = { status: 200, headers: { 'Content-Type': 'application/json' }, body: rs.recordset };
-      return;
-    } catch (err) {
-      context.log.error('GET /sugerencias ERROR:', err);
-      context.res = { status: 500, body: { error: 'Error listando sugerencias' } };
-      return;
+    if (term) {
+      q.input('term', sql.NVarChar(100), `%${term}%`);
+      where += ' AND (s.numero_caso LIKE @term OR s.notas LIKE @term)';
     }
+    if (estado) {
+      q.input('estado', sql.NVarChar(50), estado);
+      where += ' AND s.estado = @estado';
+    }
+    if (Number.isInteger(agenteIdQ) && agenteIdQ > 0) {
+      q.input('agenteId', sql.Int, agenteIdQ);
+      where += ' AND s.agente_id = @agenteId';
+    }
+
+    const rs = await q.query(`
+      SELECT TOP (@top)
+        s.id_sugerencia               AS id,
+        s.numero_caso                 AS numeroCaso,
+        s.agente_id                   AS agenteId,
+        ISNULL(u.nombre_completo,'')  AS agenteNombre,
+        ISNULL(u.correo,'')           AS agenteEmail,
+        s.estado,
+        s.notas,
+        s.creado_en                   AS creadoEn
+      FROM dbo.sugerencia s
+      LEFT JOIN dbo.usuario u
+        ON u.id_usuario = s.agente_id
+      WHERE ${where}
+      ORDER BY s.creado_en ${dir}, s.id_sugerencia ${dir};  -- <- viejo->reciente por defecto
+    `);
+
+    context.res = {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: rs.recordset
+    };
+    return;
+  } catch (err) {
+    context.log.error('GET /sugerencias ERROR:', err);
+    context.res = { status: 500, body: { error: 'Error listando sugerencias' } };
+    return;
   }
+}
+
 
   // ---------------- POST: crear sugerencia (resolviendo agente por email o id) ----------------
   try {

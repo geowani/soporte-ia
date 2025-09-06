@@ -9,9 +9,9 @@ export default function AdminSugerencias() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  // Filtros simples
+  // Filtros
   const [term, setTerm] = useState("");
-  const [top, setTop] = useState(10);            // <- antes 50
+  const [top, setTop] = useState(10); // default 10
 
   async function load() {
     try {
@@ -19,7 +19,8 @@ export default function AdminSugerencias() {
       setErr("");
 
       const params = new URLSearchParams();
-      params.set("top", String(top || 10));      // <- fallback 10
+      params.set("top", String(top || 10));  // fallback 10
+      params.set("sort", "asc");             // <- viejo -> reciente
       if (term.trim()) params.set("term", term.trim());
 
       const res = await fetch(`/api/sugerencias?${params.toString()}`);
@@ -120,7 +121,7 @@ export default function AdminSugerencias() {
               Buscar
             </button>
             <button
-              onClick={() => { setTerm(""); setTop(10); load(); }}  // <- reset a 10
+              onClick={() => { setTerm(""); setTop(10); load(); }} // reset a 10
               className="px-5 py-2 rounded-xl bg-slate-500/70 hover:bg-slate-600 text-white font-semibold"
             >
               Limpiar
