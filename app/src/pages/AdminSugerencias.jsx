@@ -128,36 +128,44 @@ export default function AdminSugerencias() {
           </div>
 
           {/* tabla */}
-          <div className="rounded-2xl bg-gray-100 p-6 md:p-8 text-black">
-            <div className="grid grid-cols-[1fr_auto] md:grid-cols-[1fr_1fr] items-center px-2 md:px-4 pb-3 font-bold text-gray-800">
-              <span>Casos</span>
-              <span className="text-right md:text-left">Agente:</span>
-            </div>
+<div className="rounded-2xl bg-gray-100 p-6 md:p-8 text-black">
+  <div className="grid grid-cols-[1fr_auto] md:grid-cols-[1fr_1fr] items-center px-2 md:px-4 pb-3 font-bold text-gray-800">
+    <span>Casos</span>
+    <span className="text-right md:text-left">Agente:</span>
+  </div>
 
-            {loading && <div className="py-6 px-4">Cargando…</div>}
-            {err && <div className="py-6 px-4 text-rose-600">{err}</div>}
+  {loading && <div className="py-6 px-4">Cargando…</div>}
+  {err && <div className="py-6 px-4 text-rose-600">{err}</div>}
 
-            {!loading && !err && (
-              <ul className="divide-y divide-gray-300">
-                {items.map((it) => (
-                  <li
-                    key={it.id}
-                    className="grid grid-cols-[1fr_auto] md:grid-cols-[1fr_1fr] items-center py-5 px-2 md:px-4"
-                  >
-                    <span className="text-lg md:text-xl font-normal font-mono tracking-widest">
-                      {it.numeroCaso}
-                    </span>
-                    <span className="text-lg md:text-xl font-medium md:text-left text-right">
-                      {it.agenteNombre || `ID ${it.agenteId}`}
-                    </span>
-                  </li>
-                ))}
-                {items.length === 0 && (
-                  <li className="py-6 px-4 text-slate-600">Sin resultados</li>
-                )}
-              </ul>
-            )}
-          </div>
+  {!loading && !err && (
+    <ul className="divide-y divide-gray-300">
+      {items.map((it) => {
+        const displayAgent =
+          (it.agenteNombre && it.agenteNombre.trim()) ? it.agenteNombre
+          : (it.agenteEmail && it.agenteEmail.trim()) ? it.agenteEmail
+          : `ID ${it.agenteId}`;
+
+        return (
+          <li
+            key={it.id}
+            className="grid grid-cols-[1fr_auto] md:grid-cols-[1fr_1fr] items-center py-5 px-2 md:px-4"
+          >
+            <span className="text-lg md:text-xl font-normal font-mono tracking-widest">
+              {it.numeroCaso}
+            </span>
+            <span className="text-lg md:text-xl font-medium md:text-left text-right">
+              {displayAgent}
+            </span>
+          </li>
+        );
+      })}
+      {items.length === 0 && (
+        <li className="py-6 px-4 text-slate-600">Sin resultados</li>
+      )}
+    </ul>
+  )}
+</div>
+
         </section>
       </div>
     </main>
