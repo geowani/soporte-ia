@@ -103,14 +103,14 @@ export default function AdminSugerencias() {
               />
             </div>
             <div className="flex flex-col">
-              <label className="text-sm text-white/80 mb-1">TOP</label>
+              <label className="text-sm text-white/80 mb-1">Número de resultados</label>
               <input
                 type="number"
                 min={1}
                 max={200}
                 className="rounded-full bg-white text-slate-900 px-4 py-2 outline-none w-28"
                 value={top}
-                onChange={(e) => setTop(Number(e.target.value || 50))}
+                onChange={(e) => setTop(Number(e.target.value || 10))}
               />
             </div>
             <button
