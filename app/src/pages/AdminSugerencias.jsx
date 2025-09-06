@@ -11,7 +11,7 @@ export default function AdminSugerencias() {
 
   // Filtros simples
   const [term, setTerm] = useState("");
-  const [top, setTop] = useState(50);
+  const [top, setTop] = useState(10);            // <- antes 50
 
   async function load() {
     try {
@@ -19,7 +19,7 @@ export default function AdminSugerencias() {
       setErr("");
 
       const params = new URLSearchParams();
-      params.set("top", String(top || 50));
+      params.set("top", String(top || 10));      // <- fallback 10
       if (term.trim()) params.set("term", term.trim());
 
       const res = await fetch(`/api/sugerencias?${params.toString()}`);
@@ -120,7 +120,7 @@ export default function AdminSugerencias() {
               Buscar
             </button>
             <button
-              onClick={() => { setTerm(""); setTop(50); load(); }}
+              onClick={() => { setTerm(""); setTop(10); load(); }}  // <- reset a 10
               className="px-5 py-2 rounded-xl bg-slate-500/70 hover:bg-slate-600 text-white font-semibold"
             >
               Limpiar
@@ -128,44 +128,43 @@ export default function AdminSugerencias() {
           </div>
 
           {/* tabla */}
-<div className="rounded-2xl bg-gray-100 p-6 md:p-8 text-black">
-  <div className="grid grid-cols-[1fr_auto] md:grid-cols-[1fr_1fr] items-center px-2 md:px-4 pb-3 font-bold text-gray-800">
-    <span>Casos</span>
-    <span className="text-right md:text-left">Agente:</span>
-  </div>
+          <div className="rounded-2xl bg-gray-100 p-6 md:p-8 text-black">
+            <div className="grid grid-cols-[1fr_auto] md:grid-cols-[1fr_1fr] items-center px-2 md:px-4 pb-3 font-bold text-gray-800">
+              <span>Casos</span>
+              <span className="text-right md:text-left">Agente:</span>
+            </div>
 
-  {loading && <div className="py-6 px-4">Cargando…</div>}
-  {err && <div className="py-6 px-4 text-rose-600">{err}</div>}
+            {loading && <div className="py-6 px-4">Cargando…</div>}
+            {err && <div className="py-6 px-4 text-rose-600">{err}</div>}
 
-  {!loading && !err && (
-    <ul className="divide-y divide-gray-300">
-      {items.map((it) => {
-        const displayAgent =
-          (it.agenteNombre && it.agenteNombre.trim()) ? it.agenteNombre
-          : (it.agenteEmail && it.agenteEmail.trim()) ? it.agenteEmail
-          : `ID ${it.agenteId}`;
+            {!loading && !err && (
+              <ul className="divide-y divide-gray-300">
+                {items.map((it) => {
+                  const displayAgent =
+                    (it.agenteNombre && it.agenteNombre.trim()) ? it.agenteNombre
+                    : (it.agenteEmail && it.agenteEmail.trim()) ? it.agenteEmail
+                    : `ID ${it.agenteId}`;
 
-        return (
-          <li
-            key={it.id}
-            className="grid grid-cols-[1fr_auto] md:grid-cols-[1fr_1fr] items-center py-5 px-2 md:px-4"
-          >
-            <span className="text-lg md:text-xl font-normal font-mono tracking-widest">
-              {it.numeroCaso}
-            </span>
-            <span className="text-lg md:text-xl font-medium md:text-left text-right">
-              {displayAgent}
-            </span>
-          </li>
-        );
-      })}
-      {items.length === 0 && (
-        <li className="py-6 px-4 text-slate-600">Sin resultados</li>
-      )}
-    </ul>
-  )}
-</div>
-
+                  return (
+                    <li
+                      key={it.id}
+                      className="grid grid-cols-[1fr_auto] md:grid-cols-[1fr_1fr] items-center py-5 px-2 md:px-4"
+                    >
+                      <span className="text-lg md:text-xl font-normal font-mono tracking-widest">
+                        {it.numeroCaso}
+                      </span>
+                      <span className="text-lg md:text-xl font-medium md:text-left text-right">
+                        {displayAgent}
+                      </span>
+                    </li>
+                  );
+                })}
+                {items.length === 0 && (
+                  <li className="py-6 px-4 text-slate-600">Sin resultados</li>
+                )}
+              </ul>
+            )}
+          </div>
         </section>
       </div>
     </main>
