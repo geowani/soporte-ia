@@ -1,6 +1,5 @@
 // app/src/App.jsx
 import { useState } from "react";
-import { login } from "./api";
 import "./index.css";
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
@@ -8,11 +7,34 @@ import Sugerencias from "./pages/Sugerencias";
 import Confirmacion from "./pages/Confirmacion";
 import Resultados from "./pages/Resultados";
 import CasoDetalle from "./pages/CasoDetalle";
-import AdminDashboard from "./pages/AdminDashboard";       // admin home
-import AdminAgentes from "./pages/AdminAgentes";           // /admin/agentes
-import AdminAgregarCaso from "./pages/AdminAgregarCaso";   // /admin/agregar-caso
-import AdminSugerencias from "./pages/AdminSugerencias";   // /admin/sugerencias (NUEVO)
-import AdminHistorial from "./pages/AdminHistorial"
+import AdminDashboard from "./pages/AdminDashboard";
+import AdminAgentes from "./pages/AdminAgentes";
+import AdminAgregarCaso from "./pages/AdminAgregarCaso";
+import AdminSugerencias from "./pages/AdminSugerencias";
+import AdminHistorial from "./pages/AdminHistorial";
+
+// utils de rol
+function normalizeRole(r) {
+  return (r || "").toString().trim().toLowerCase();
+}
+function isAdminRole(r) {
+  const x = normalizeRole(r);
+  return ["admin", "administrador", "superadmin"].includes(x);
+}
+function getStoredUser() {
+  try {
+    const raw = localStorage.getItem("user");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+function getStoredRole() {
+  // primero del objeto user, luego del fallback legacy userRole
+  const u = getStoredUser();
+  if (u && (u.rol || u.role)) return normalizeRole(u.rol || u.role);
+  return normalizeRole(localStorage.getItem("userRole") || "user");
+}
 
 export default function App() {
   const [email, setEmail] = useState("");
@@ -26,30 +48,54 @@ export default function App() {
   const onSubmit = async (e) => {
     e.preventDefault();
     setMsg(""); setType("info");
-    if (!email || !password) { setMsg("Completa correo y contraseña."); setType("error"); return; }
+    if (!email || !password) {
+      setMsg("Completa correo y contraseña.");
+      setType("error");
+      return;
+    }
 
     try {
       setLoading(true);
-      // Espera { ok, message, email, role }
-      const r = await login(email, password);
+
+      // Llamamos directo al backend nuevo
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password })
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.message || "Error de login");
+      }
+
+      // user del backend: { id_usuario, correo, nombre_completo, rol(normalizado), role(alias), isAdmin }
+      const user = data.user || {};
+      const roleNorm = normalizeRole(user.rol || user.role || "user");
+      const isAdmin = isAdminRole(roleNorm);
+
+      // Guardar sesión “moderna”
+      localStorage.setItem("logged", "1");
+      localStorage.setItem("user", JSON.stringify({ ...user, rol: roleNorm, role: roleNorm, isAdmin }));
+      localStorage.setItem("agentId", String(user.id_usuario || "")); // útil para otras pantallas
+      // Fallbacks “legacy” (por compatibilidad con tu código previo)
+      localStorage.setItem("userRole", roleNorm);
+      localStorage.setItem("userEmail", user.correo || email);
+
+      // Cookies de cortesía (el servidor ya las setea, pero reforzamos en front)
+      document.cookie = `agent_id=${user.id_usuario || ""}; Path=/; SameSite=Lax; Secure; Max-Age=2592000`;
+      if (user.correo) {
+        document.cookie = `user_email=${encodeURIComponent(user.correo)}; Path=/; SameSite=Lax; Secure; Max-Age=2592000`;
+      }
+      document.cookie = `role=${encodeURIComponent(roleNorm)}; Path=/; SameSite=Lax; Secure; Max-Age=2592000`;
 
       setType("success");
-      setMsg(r?.message || "Inicio de sesión exitoso");
-
-      // Guarda sesión y rol
-      localStorage.setItem("logged", "1");
-      localStorage.setItem("userRole", r?.role || "user");
-      localStorage.setItem("userEmail", r?.email || email);
-
+      setMsg("Inicio de sesión exitoso");
       setLogged(true);
 
-      // Redirección por rol
-      const role = r?.role || "user";
-      if (role === "admin") {
-        navigate("/admin");
-      } else {
-        navigate("/dashboard");
-      }
+      // Redirección sugerida por backend o por rol
+      const home = data.home || (isAdmin ? "/admin" : "/dashboard");
+      navigate(home, { replace: true });
     } catch (err) {
       setType("error");
       setMsg(err.message || "Error al iniciar sesión");
@@ -140,24 +186,36 @@ export default function App() {
     );
   }
 
-  // Si SÍ está logueado, usa rutas (dashboard / admin / etc.)
+  // logout: limpia todo
   const onLogout = () => {
     localStorage.removeItem("logged");
     localStorage.removeItem("userRole");
     localStorage.removeItem("userEmail");
+    localStorage.removeItem("user");
+    localStorage.removeItem("agentId");
+    // limpia cookies
+    document.cookie = "agent_id=; Path=/; Max-Age=0; SameSite=Lax; Secure";
+    document.cookie = "user_email=; Path=/; Max-Age=0; SameSite=Lax; Secure";
+    document.cookie = "role=; Path=/; Max-Age=0; SameSite=Lax; Secure";
     setLogged(false);
-    navigate("/");
+    navigate("/", { replace: true });
   };
 
-  const role = localStorage.getItem("userRole") || "user";
+  const role = getStoredRole();
 
   return (
     <Routes>
+      {/* Redirección raíz según rol */}
+      <Route
+        path="/"
+        element={<Navigate to={isAdminRole(role) ? "/admin" : "/dashboard"} replace />}
+      />
+
       {/* Admin Home */}
       <Route
         path="/admin"
         element={
-          role === "admin"
+          isAdminRole(role)
             ? <AdminDashboard onLogout={onLogout} />
             : <Navigate to="/dashboard" replace />
         }
@@ -167,7 +225,7 @@ export default function App() {
       <Route
         path="/admin/agentes"
         element={
-          role === "admin"
+          isAdminRole(role)
             ? <AdminAgentes />
             : <Navigate to="/dashboard" replace />
         }
@@ -177,18 +235,28 @@ export default function App() {
       <Route
         path="/admin/agregar-caso"
         element={
-          role === "admin"
+          isAdminRole(role)
             ? <AdminAgregarCaso />
             : <Navigate to="/dashboard" replace />
         }
       />
 
-      {/* ✅ Admin: Lista de sugerencias */}
+      {/* Admin: Lista de sugerencias */}
       <Route
         path="/admin/sugerencias"
         element={
-          role === "admin"
+          isAdminRole(role)
             ? <AdminSugerencias />
+            : <Navigate to="/dashboard" replace />
+        }
+      />
+
+      {/* Admin: Historial */}
+      <Route
+        path="/admin/historial"
+        element={
+          isAdminRole(role)
+            ? <AdminHistorial />
             : <Navigate to="/dashboard" replace />
         }
       />
@@ -200,15 +268,11 @@ export default function App() {
       <Route path="/resultados" element={<Resultados />} />
       <Route path="/caso/:id" element={<CasoDetalle />} />
 
-      {/* Redirección por rol para cualquier otra ruta */}
+      {/* 404 -> manda al home según rol */}
       <Route
         path="*"
-        element={<Navigate to={role === "admin" ? "/admin" : "/dashboard"} replace />}
+        element={<Navigate to={isAdminRole(role) ? "/admin" : "/dashboard"} replace />}
       />
-      <Route
-  path="/admin/historial"
-  element={role === "admin" ? <AdminHistorial /> : <Navigate to="/dashboard" replace />}
-/>
     </Routes>
   );
 }

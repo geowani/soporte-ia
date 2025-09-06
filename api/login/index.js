@@ -1,7 +1,7 @@
 // api/login/index.js
 const sql = require('mssql');
 
-// Lee credenciales desde variables de entorno de tu Function App
+// Credenciales desde variables de entorno (configúralas en tu Function App)
 const config = {
   user: process.env.SQLUSER,
   password: process.env.SQLPASS,
@@ -10,7 +10,7 @@ const config = {
   options: { encrypt: true, trustServerCertificate: false }
 };
 
-// (opcional) reusar pool entre invocaciones para performance
+// Reusar pool entre invocaciones
 let poolPromise = null;
 async function getPool() {
   if (!poolPromise) poolPromise = sql.connect(config);
@@ -18,7 +18,7 @@ async function getPool() {
 }
 
 module.exports = async function (context, req) {
-  // CORS / preflight (por si llamas desde otro origen)
+  // Preflight CORS
   if (req.method === 'OPTIONS') {
     context.res = {
       status: 204,
@@ -36,7 +36,7 @@ module.exports = async function (context, req) {
     return;
   }
 
-  // Acepta "email" o "correo" para ser tolerante con el front
+  // Acepta "email" o "correo" desde el front
   const emailRaw = (req.body?.email ?? req.body?.correo ?? '').toString().trim().toLowerCase();
   const passwordRaw = (req.body?.password ?? '').toString();
 
@@ -48,7 +48,7 @@ module.exports = async function (context, req) {
   try {
     const pool = await getPool();
 
-    // Valida credenciales: compara hash SHA2_256 del password contra la columna contrasena_hash (hex)
+    // Valida credenciales con SHA2_256
     const rs = await pool.request()
       .input('correo', sql.VarChar(256), emailRaw)
       .input('pwd',    sql.VarChar(200), passwordRaw)
@@ -71,18 +71,28 @@ module.exports = async function (context, req) {
     }
 
     const u = rs.recordset[0];
+
+    // Normaliza rol y calcula isAdmin
+    const roleNorm = String(u.rol || '').trim().toLowerCase();
+    const isAdmin = ['admin', 'administrador', 'superadmin'].includes(roleNorm);
+
     const user = {
       id_usuario: u.id_usuario,
       correo: u.correo,
       nombre_completo: u.nombre_completo,
-      rol: u.rol
+      rol: roleNorm,     // mantiene clave 'rol'
+      role: roleNorm,    // alias útil
+      isAdmin            // boolean listo para usar
     };
 
-    // Cookies de cortesía (útiles para front/back)
+    const home = isAdmin ? '/admin' : '/dashboard';
+
+    // Cookies útiles para front/back (opcional)
     const cookieAttrs = 'Path=/; SameSite=Lax; Secure; Max-Age=2592000'; // 30 días
     const cookies = [
       `agent_id=${user.id_usuario}; ${cookieAttrs}`,
-      `user_email=${encodeURIComponent(user.correo)}; ${cookieAttrs}`
+      `user_email=${encodeURIComponent(user.correo)}; ${cookieAttrs}`,
+      `role=${encodeURIComponent(roleNorm)}; ${cookieAttrs}`
     ];
 
     context.res = {
@@ -90,10 +100,11 @@ module.exports = async function (context, req) {
       headers: {
         'Content-Type': 'application/json',
         'Set-Cookie': cookies
-        // Si llamas desde otro origen, habilita CORS:
-        // 'Access-Control-Allow-Origin': '*'
+        // Si necesitas CORS abierto, OJO con cookies:
+        // 'Access-Control-Allow-Origin': 'https://TU-ORIGEN',
+        // 'Access-Control-Allow-Credentials': 'true'
       },
-      body: { ok: true, user }
+      body: { ok: true, user, home }
     };
   } catch (err) {
     context.log.error('LOGIN ERROR:', err);
