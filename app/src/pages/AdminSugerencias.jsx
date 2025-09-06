@@ -97,7 +97,7 @@ export default function AdminSugerencias() {
               <label className="text-sm text-white/80 mb-1">Buscar</label>
               <input
                 className="rounded-full bg-white text-slate-900 px-4 py-2 outline-none shadow-inner shadow-black/10"
-                placeholder="Número de caso o notas…"
+                placeholder="Número de caso"
                 value={term}
                 onChange={(e) => setTerm(e.target.value)}
               />
