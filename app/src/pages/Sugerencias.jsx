@@ -65,8 +65,6 @@ export default function Sugerencias() {
         ...(userEmail ? { "x-user-email": userEmail } : {})
       };
 
-      console.debug("[SUG:submit] payload:", payload, "headers:", headers);
-
       const res = await fetch("/api/sugerencias", {
         method: "POST",
         headers,
@@ -75,20 +73,31 @@ export default function Sugerencias() {
       });
 
       const txt = await res.text();
-      console.debug("[POST /api/sugerencias] status:", res.status, "body:", txt);
 
-      // ⛔ Duplicado: el backend devuelve 409
+      // ⛔ Duplicado: backend devuelve 409 → redirigir a /ya-sugerido
       if (res.status === 409) {
         let data = {};
         try { data = txt ? JSON.parse(txt) : {}; } catch {}
-        const ex = data?.existing;
-        alert(
-          `Este número de caso ya fue sugerido.\n` +
-          (ex?.numeroCaso ? `Caso: ${ex.numeroCaso}\n` : "") +
-          (ex?.id ? `ID existente: ${ex.id}\n` : "") +
-          (ex?.agenteId ? `Agente ID: ${ex.agenteId}` : "")
-        );
-        return; // no navegar a confirmación
+        const ex = data?.existing || {};
+        const who =
+          (ex.agenteNombre && ex.agenteNombre.trim()) ? ex.agenteNombre :
+          (ex.agenteEmail && ex.agenteEmail.trim())   ? ex.agenteEmail   :
+          (ex.agenteId ? `ID ${ex.agenteId}` : "");
+
+        // Fallback por si refrescan
+        sessionStorage.setItem("dup_case", ex.numeroCaso || payload.numeroCaso);
+        if (ex.id) sessionStorage.setItem("dup_id", String(ex.id));
+        if (who) sessionStorage.setItem("dup_agent", String(who));
+
+        navigate("/ya-sugerido", {
+          state: {
+            caso: ex.numeroCaso || payload.numeroCaso,
+            id: ex.id ?? null,
+            agente: who
+          }
+        });
+        setSending(false);
+        return;
       }
 
       if (!res.ok) throw new Error(`HTTP ${res.status} - ${txt}`);
