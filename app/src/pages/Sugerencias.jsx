@@ -76,6 +76,21 @@ export default function Sugerencias() {
 
       const txt = await res.text();
       console.debug("[POST /api/sugerencias] status:", res.status, "body:", txt);
+
+      // ⛔ Duplicado: el backend devuelve 409
+      if (res.status === 409) {
+        let data = {};
+        try { data = txt ? JSON.parse(txt) : {}; } catch {}
+        const ex = data?.existing;
+        alert(
+          `Este número de caso ya fue sugerido.\n` +
+          (ex?.numeroCaso ? `Caso: ${ex.numeroCaso}\n` : "") +
+          (ex?.id ? `ID existente: ${ex.id}\n` : "") +
+          (ex?.agenteId ? `Agente ID: ${ex.agenteId}` : "")
+        );
+        return; // no navegar a confirmación
+      }
+
       if (!res.ok) throw new Error(`HTTP ${res.status} - ${txt}`);
 
       let body = {};
