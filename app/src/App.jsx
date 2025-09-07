@@ -268,7 +268,7 @@ export default function App() {
       <Route path="/confirmacion" element={<Confirmacion />} />
       <Route path="/resultados" element={<Resultados />} />
       <Route path="/caso/:id" element={<CasoDetalle />} />
-      <Route path="/ya-sugerido" element={<SugerenciaExiste />} />   {/* ⬅️ nueva */}
+      <Route path="/ya-sugerido" element={<SugerenciaExiste />} />
 
       <Route
         path="*"
