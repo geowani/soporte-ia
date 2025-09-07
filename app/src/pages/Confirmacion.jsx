@@ -47,7 +47,6 @@ export default function Confirmacion() {
             </div>
             {id && (
               <div className="text-sm text-slate-200 mb-4">
-                ID de registro: <b>{id}</b>
               </div>
             )}
 
