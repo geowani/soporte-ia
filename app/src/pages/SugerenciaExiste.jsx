@@ -38,7 +38,7 @@ export default function SugerenciaExiste() {
 
           <div className="mx-auto w-full rounded-2xl bg-black/30 backdrop-blur-md p-6 sm:p-8 border border-white/15 shadow-[0_20px_60px_rgba(0,0,0,.45)]">
             <p className="text-slate-200 leading-relaxed mb-6">
-              Este número de caso <span className="font-bold">ya fue sugerido</span> y se encuentra
+              Este número de caso ya fue sugerido y se encuentra
               bajo revisión.
             </p>
 
