@@ -6,7 +6,7 @@ export default function SugerenciaExiste() {
   const nav = useNavigate();
 
   const caso = state?.caso || sessionStorage.getItem("dup_case") || "";
-  - const id   = state?.id   ?? Number(sessionStorage.getItem("dup_id")) || null;
+  const id     = (state?.id ?? Number(sessionStorage.getItem("dup_id"))) || null;
   const agente = state?.agente || sessionStorage.getItem("dup_agent") || "";
 
   return (
