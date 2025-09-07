@@ -29,78 +29,81 @@ module.exports = async function (context, req) {
     return;
   }
 
-// ---------- GET: listar sugerencias ----------
-if (req.method === 'GET') {
-  try {
-    const pool = await getPool();
+  // ---------- GET: listar sugerencias ----------
+  if (req.method === 'GET') {
+    try {
+      const pool = await getPool();
 
-    const top = Math.min(Math.max(parseInt(req.query.top || '50', 10), 1), 200);
-    const term = String(req.query.term || '').trim();
-    const estado = String(req.query.estado || '').trim().toLowerCase();
-    const agenteIdQ = Number(req.query.agenteId || 0);
+      const top = Math.min(Math.max(parseInt(req.query.top || '50', 10), 1), 200);
+      const term = String(req.query.term || '').trim();
+      const estado = String(req.query.estado || '').trim().toLowerCase();
+      const agenteIdQ = Number(req.query.agenteId || 0);
 
-    // NEW: dirección de orden
-    const sort = String(req.query.sort || 'asc').toLowerCase(); // 'asc' | 'desc'
-    const dir = (sort === 'desc') ? 'DESC' : 'ASC';             // default: ASC (viejo -> reciente)
+      // dirección de orden
+      const sort = String(req.query.sort || 'asc').toLowerCase(); // 'asc' | 'desc'
+      const dir = (sort === 'desc') ? 'DESC' : 'ASC';             // default: ASC (viejo -> reciente)
 
-    const q = pool.request().input('top', sql.Int, top);
-    let where = '1=1';
+      const q = pool.request().input('top', sql.Int, top);
+      let where = '1=1';
 
-    if (term) {
-      q.input('term', sql.NVarChar(100), `%${term}%`);
-      where += ' AND (s.numero_caso LIKE @term OR s.notas LIKE @term)';
+      if (term) {
+        q.input('term', sql.NVarChar(100), `%${term}%`);
+        where += ' AND (s.numero_caso LIKE @term OR s.notas LIKE @term)';
+      }
+      if (estado) {
+        q.input('estado', sql.NVarChar(50), estado);
+        where += ' AND s.estado = @estado';
+      }
+      if (Number.isInteger(agenteIdQ) && agenteIdQ > 0) {
+        q.input('agenteId', sql.Int, agenteIdQ);
+        where += ' AND s.agente_id = @agenteId';
+      }
+
+      const rs = await q.query(`
+        SELECT TOP (@top)
+          s.id_sugerencia               AS id,
+          s.numero_caso                 AS numeroCaso,
+          s.agente_id                   AS agenteId,
+          ISNULL(u.nombre_completo,'')  AS agenteNombre,
+          ISNULL(u.correo,'')           AS agenteEmail,
+          s.estado,
+          s.notas,
+          s.creado_en                   AS creadoEn
+        FROM dbo.sugerencia s
+        LEFT JOIN dbo.usuario u
+          ON u.id_usuario = s.agente_id
+        WHERE ${where}
+        ORDER BY s.creado_en ${dir}, s.id_sugerencia ${dir};
+      `);
+
+      context.res = {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: rs.recordset
+      };
+      return;
+    } catch (err) {
+      context.log.error('GET /sugerencias ERROR:', err);
+      context.res = { status: 500, body: { error: 'Error listando sugerencias' } };
+      return;
     }
-    if (estado) {
-      q.input('estado', sql.NVarChar(50), estado);
-      where += ' AND s.estado = @estado';
-    }
-    if (Number.isInteger(agenteIdQ) && agenteIdQ > 0) {
-      q.input('agenteId', sql.Int, agenteIdQ);
-      where += ' AND s.agente_id = @agenteId';
-    }
-
-    const rs = await q.query(`
-      SELECT TOP (@top)
-        s.id_sugerencia               AS id,
-        s.numero_caso                 AS numeroCaso,
-        s.agente_id                   AS agenteId,
-        ISNULL(u.nombre_completo,'')  AS agenteNombre,
-        ISNULL(u.correo,'')           AS agenteEmail,
-        s.estado,
-        s.notas,
-        s.creado_en                   AS creadoEn
-      FROM dbo.sugerencia s
-      LEFT JOIN dbo.usuario u
-        ON u.id_usuario = s.agente_id
-      WHERE ${where}
-      ORDER BY s.creado_en ${dir}, s.id_sugerencia ${dir};  -- <- viejo->reciente por defecto
-    `);
-
-    context.res = {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: rs.recordset
-    };
-    return;
-  } catch (err) {
-    context.log.error('GET /sugerencias ERROR:', err);
-    context.res = { status: 500, body: { error: 'Error listando sugerencias' } };
-    return;
   }
-}
-
 
   // ---------------- POST: crear sugerencia (resolviendo agente por email o id) ----------------
   try {
     const body = req.body || {};
-    const numeroCaso = String(body.numeroCaso || '').trim();
-    if (!numeroCaso) {
+    const numeroCasoRaw = String(body.numeroCaso || '').trim();
+    if (!numeroCasoRaw) {
       context.res = { status: 400, body: { error: 'numeroCaso es requerido' } };
       return;
     }
 
+    // normalización para comparar duplicados (ignorando espacios y may/min)
+    const numeroCasoNorm = numeroCasoRaw.replace(/\s+/g, '').toLowerCase();
+
     const cookieStr   = req.headers.cookie || '';
-    const cookieAgent = (/(?:^|;\\s*)agent_id=(\\d+)/.exec(cookieStr) || [])[1];
+    // FIX: regex correcto (sin dobles backslashes)
+    const cookieAgent = (/(?:^|;\s*)agent_id=(\d+)/.exec(cookieStr) || [])[1];
     const headerAgent = req.headers['x-agent-id'];
     const headerEmail = String(req.headers['x-user-email'] || '').trim().toLowerCase();
 
@@ -138,8 +141,41 @@ if (req.method === 'GET') {
       return;
     }
 
+    // 🔒 Chequeo de duplicado antes de insertar
+    const dup = await pool.request()
+      .input('n', sql.NVarChar(200), numeroCasoNorm)
+      .query(`
+        SELECT TOP 1
+          s.id_sugerencia   AS id,
+          s.numero_caso     AS numeroCaso,
+          s.agente_id       AS agenteId,
+          s.estado,
+          s.creado_en       AS creadoEn,
+          ISNULL(u.nombre_completo,'') AS agenteNombre,
+          ISNULL(u.correo,'') AS agenteEmail
+        FROM dbo.sugerencia s
+        LEFT JOIN dbo.usuario u ON u.id_usuario = s.agente_id
+        WHERE LOWER(REPLACE(LTRIM(RTRIM(s.numero_caso)),' ',''))
+              = @n
+        ORDER BY s.id_sugerencia DESC;
+      `);
+
+    if (dup.recordset.length) {
+      context.res = {
+        status: 409, // Conflict
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          error: 'duplicated',
+          message: `El caso ${numeroCasoRaw} ya existe.`,
+          existing: dup.recordset[0]
+        }
+      };
+      return;
+    }
+
+    // Insertar
     const insert = await pool.request()
-      .input('numeroCaso', sql.NVarChar(50), numeroCaso)
+      .input('numeroCaso', sql.NVarChar(50), numeroCasoRaw)
       .input('agenteId',  sql.Int, agenteId)
       .input('estado',    sql.NVarChar(50), estado)
       .input('notas',     sql.NVarChar(sql.MAX), String(body.notas || ''))
