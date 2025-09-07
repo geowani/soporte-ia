@@ -46,10 +46,6 @@ export default function SugerenciaExiste() {
               Caso sugerido: <span className="font-mono tracking-widest">{caso}</span>
             </div>
 
-            {id ? (
-              <div className="text-lg mb-4">ID existente: <b>{id}</b></div>
-            ) : null}
-
             {agente ? (
               <div className="text-base mb-6 text-white/80">Agente: {agente}</div>
             ) : null}
