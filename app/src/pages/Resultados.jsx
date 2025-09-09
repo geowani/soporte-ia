@@ -1,50 +1,73 @@
-import { useMemo, useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-
-// Puedes sustituir esto por un import desde ../data/casos si ya creaste el dataset
-const MOCK_CASOS = [
-  { id: "1052505", area: "SYS", descripcion: "Usuario no puede iniciar sesion" },
-  { id: "0895420", area: "PC",  descripcion: "Usuario no puede cerrar una orden de reparación" },
-  { id: "1024156", area: "PC",  descripcion: "Usuario no puede recibir mensaje de verificación." },
-  { id: "1010518", area: "NET", descripcion: "Intermitencia al acceder al portal interno" },
-];
+import { buscarCasos } from "../api";
 
 export default function Resultados() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Lee q de la URL y sincroniza el input
+  // Lee ?q= de la URL
   const urlQ = new URLSearchParams(location.search).get("q") || "";
   const [q, setQ] = useState(urlQ);
 
+  // Datos de la API
+  const [items, setItems] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  // Mantén input sincronizado si cambia la URL
   useEffect(() => { setQ(urlQ); }, [urlQ]);
 
-  const results = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (!s) return [];
-    return MOCK_CASOS.filter(
-      c => c.id.includes(s) || c.descripcion.toLowerCase().includes(s)
-    );
-  }, [q]);
+  // Ejecuta la búsqueda cada vez que cambie ?q=
+  useEffect(() => {
+    const term = urlQ.trim();
+    if (!term) {
+      setItems([]);
+      setTotal(0);
+      setError("");
+      return;
+    }
 
+    let abort = false;
+    (async () => {
+      try {
+        setLoading(true);
+        setError("");
+        const res = await buscarCasos({ q: term, page: 1, pageSize: 20 });
+        if (!abort) {
+          setItems(res.items || []);
+          setTotal(res.total ?? (res.items?.length || 0));
+        }
+      } catch (e) {
+        if (!abort) {
+          setItems([]);
+          setTotal(0);
+          setError(e?.message || "Error al buscar casos");
+        }
+      } finally {
+        if (!abort) setLoading(false);
+      }
+    })();
+
+    return () => { abort = true; };
+  }, [urlQ]);
+
+  // Submit de búsqueda: actualiza la URL (recargable/compartible)
   const doSearch = () => {
     const term = q.trim();
     if (!term) return;
-    // Actualiza la URL (compartible / recargable)
     navigate(`/resultados?q=${encodeURIComponent(term)}`, { replace: true });
   };
 
-  // Enter para buscar
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        doSearch();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [q]);
+  // Mensajes derivados
+  const emptyMessage = useMemo(() => {
+    if (!q.trim()) return "Escribe un término para buscar.";
+    if (loading) return "";
+    if (error) return "";
+    if ((items?.length || 0) === 0) return `Sin coincidencias para “${q}”.`;
+    return "";
+  }, [q, loading, error, items]);
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
@@ -72,9 +95,9 @@ export default function Resultados() {
         </button>
       </div>
 
-      {/* CONTENIDO CENTRADO */}
+      {/* Contenido */}
       <div className="mt-6 px-4 w-full flex flex-col items-center">
-        {/* Buscador centrado (mismo estilo del dashboard) */}
+        {/* Buscador */}
         <div className="w-full max-w-3xl flex items-center rounded-full bg-white/85 text-slate-900 overflow-hidden shadow-inner shadow-black/10">
           <input
             className="flex-1 bg-transparent px-4 py-3 outline-none placeholder:text-slate-600"
@@ -82,6 +105,12 @@ export default function Resultados() {
             placeholder="Busca por título, id o síntoma"
             value={q}
             onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                doSearch();
+              }
+            }}
             aria-label="Barra de búsqueda"
           />
           <button
@@ -96,40 +125,72 @@ export default function Resultados() {
           </button>
         </div>
 
-        {/* Caja de resultados centrada + autoajustable con scroll */}
+        {/* Resultados */}
         <div className="mt-5 w-full max-w-4xl rounded-2xl bg-slate-200/85 text-slate-900 p-5 md:p-6 border border-white/20 shadow-[0_20px_60px_rgba(0,0,0,.35)]">
-          <div className="font-bold text-lg mb-3">Resultados:</div>
-
-          {!q.trim() && (
-            <div className="text-slate-700">Escribe un término para buscar.</div>
-          )}
-
-          {q.trim() && results.length === 0 && (
-            <div className="text-slate-700">Sin coincidencias para “{q}”.</div>
-          )}
-
-          <div className="max-h-[60vh] overflow-y-auto pr-2">
-            {results.map((c, i) => (
-              <div key={c.id} className="py-3">
-                <div className="flex items-start justify-between">
-                  {/* Navega al detalle con la búsqueda actual */}
-                  <button
-                    onClick={() => navigate(`/caso/${c.id}`, { state: { fromQ: q } })}
-                    className="text-blue-600 font-bold hover:underline text-left"
-                  >
-                    Caso: {c.id}
-                  </button>
-                  <span className="text-blue-600 font-semibold">{c.area}</span>
-                </div>
-                <div className="text-blue-600 mt-1">
-                  Descripción: {c.descripcion}
-                </div>
-                {i < results.length - 1 && (
-                  <div className="mt-3 h-px bg-slate-500/60 w-full"></div>
-                )}
+          <div className="flex items-center justify-between mb-3">
+            <div className="font-bold text-lg">Resultados:</div>
+            {total > 0 && (
+              <div className="text-sm text-slate-700">
+                {total} coincidencia{total === 1 ? "" : "s"}
               </div>
-            ))}
+            )}
           </div>
+
+          {!!error && (
+            <div className="text-red-700 bg-red-100/70 border border-red-300 rounded-md px-3 py-2 mb-3">
+              {error}
+            </div>
+          )}
+
+          {!!emptyMessage && (
+            <div className="text-slate-700">{emptyMessage}</div>
+          )}
+
+          {loading && (
+            <div className="text-slate-700 animate-pulse">Buscando…</div>
+          )}
+
+          {!loading && !error && items?.length > 0 && (
+            <div className="max-h-[60vh] overflow-y-auto pr-2">
+              {items.map((c, i) => {
+                // Campos desde el SP: id_caso, numero_caso, asunto, descripcion, departamento
+                const idCaso = c.id_caso ?? c.id ?? 0;
+                const numero = c.numero_caso ?? "";
+                const area = c.departamento ?? "";
+                const asunto = c.asunto ?? "";
+                const descripcion = c.descripcion ?? "";
+
+                return (
+                  <div key={idCaso} className="py-3">
+                    <div className="flex items-start justify-between">
+                      {/* Navega al detalle con el id del caso */}
+                      <button
+                        onClick={() => navigate(`/caso/${idCaso}`, { state: { fromQ: q } })}
+                        className="text-blue-600 font-bold hover:underline text-left"
+                        title={asunto || "Ver detalle"}
+                      >
+                        Caso: {numero || idCaso}
+                      </button>
+                      <span className="text-blue-600 font-semibold">
+                        {area || "—"}
+                      </span>
+                    </div>
+
+                    <div className="text-slate-800 mt-1">
+                      {asunto && <span className="font-semibold">{asunto}. </span>}
+                      <span className="text-blue-600">
+                        Descripción: {descripcion}
+                      </span>
+                    </div>
+
+                    {i < items.length - 1 && (
+                      <div className="mt-3 h-px bg-slate-500/60 w-full"></div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </main>
