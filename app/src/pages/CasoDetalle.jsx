@@ -1,22 +1,52 @@
-import { useMemo, useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { CASOS } from "../data/casos";
+// ❌ Quitamos el mock local:
+// import { CASOS } from "../data/casos";
 
 function fmt(fecha) {
+  if (!fecha) return "—";
   try {
-    const d = new Date(fecha + "T00:00:00");
+    // acepta "2025-09-01" o Date
+    const d = typeof fecha === "string" ? new Date(fecha + "T00:00:00") : new Date(fecha);
     return d.toLocaleDateString();
-  } catch { return fecha; }
+  } catch {
+    return String(fecha);
+  }
+}
+
+// Normaliza un row de la API (sp_caso_buscar o sp_caso_buscar_front) a lo que muestra tu UI
+function normalize(row) {
+  if (!row) return null;
+  // sp_caso_buscar => id_caso, numero_caso, asunto, descripcion, departamento (sin fechas) :contentReference[oaicite:2]{index=2}
+  // sp_caso_buscar_front => id (id_caso), codigo (numero_caso), titulo (asunto), descripcion, sistema/departamento, fecha_creacion :contentReference[oaicite:3]{index=3}
+  const id = row.id_caso ?? row.id ?? row.numero_caso ?? row.codigo ?? row.Id ?? null;
+
+  return {
+    id,
+    inicio: row.fecha_creacion ?? row.inicio ?? null,
+    cierre: row.fecha_cierre ?? row.cierre ?? null,
+    descripcion: row.descripcion ?? "",
+    solucion: row.solucion ?? "", // si no viene, queda vacío
+    resueltoPor: row.resuelto_por ?? row.resueltoPor ?? "—",
+    departamento:
+      row.departamento ?? row.sistema ?? row.sistema_det ?? "—",
+    nivel: row.nivel ?? "—",
+  };
 }
 
 export default function CasoDetalle() {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+
   const fromQ = location.state?.fromQ || "";
+  const rowFromNav = location.state?.row || null;
 
   // 🔎 estado de búsqueda dentro del detalle
   const [q, setQ] = useState(fromQ);
+
+  // estado del caso (normalizado)
+  const [caso, setCaso] = useState(() => normalize(rowFromNav));
 
   // si venimos de resultados con otra búsqueda, sincroniza
   useEffect(() => { setQ(fromQ); }, [fromQ]);
@@ -24,7 +54,6 @@ export default function CasoDetalle() {
   const doSearch = () => {
     const term = (q || "").trim();
     if (!term) return;
-    // Ir a Resultados con la nueva búsqueda
     navigate(`/resultados?q=${encodeURIComponent(term)}`);
   };
 
@@ -40,7 +69,39 @@ export default function CasoDetalle() {
     return () => window.removeEventListener("keydown", onKey);
   }, [q]);
 
-  const caso = useMemo(() => CASOS.find(c => c.id === id), [id]);
+  // Si no traen el row en state, intenta resolver por URL /caso/:id
+  useEffect(() => {
+    if (caso) return; // ya lo tenemos por state
+    let alive = true;
+
+    (async () => {
+      try {
+        // 1) intenta con el endpoint "front" (trae fecha_creacion)
+        let r = await fetch(`/api/casos-search-front?q=${encodeURIComponent(String(id))}`);
+        if (!r.ok) {
+          // 2) fallback a búsqueda básica
+          r = await fetch(`/api/casos-search?q=${encodeURIComponent(String(id))}`);
+        }
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const data = await r.json();
+
+        // soporta formato { items: [...] } o arreglo directo
+        const items = Array.isArray(data) ? data : (data.items || []);
+        const match =
+          items.find((x) => String(x.id_caso ?? x.id) === String(id)) ||
+          items.find((x) => String(x.numero_caso ?? x.codigo) === String(id)) ||
+          null;
+
+        if (alive) setCaso(normalize(match));
+      } catch (err) {
+        if (alive) setCaso(null);
+        // (opcional) log local
+        // console.error("Error cargando caso", err);
+      }
+    })();
+
+    return () => { alive = false; };
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
@@ -107,16 +168,16 @@ export default function CasoDetalle() {
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                 <div className="font-bold text-lg">Caso: {caso.id}</div>
                 <div className="text-right">
-                <div><span className="font-bold">Inicio:</span> {fmt(caso.inicio)}</div>
-                <div><span className="font-bold">Cierre:</span> {fmt(caso.cierre)}</div>
+                  <div><span className="font-bold">Inicio:</span> {fmt(caso.inicio)}</div>
+                  <div><span className="font-bold">Cierre:</span> {fmt(caso.cierre)}</div>
                 </div>
               </div>
 
               <div className="mt-6 font-bold">Descripción:</div>
-              <p className="mt-1 leading-relaxed">{caso.descripcion}</p>
+              <p className="mt-1 leading-relaxed">{caso.descripcion || "—"}</p>
 
               <div className="mt-6 font-bold">Solución:</div>
-              <p className="mt-1 leading-relaxed">{caso.solucion}</p>
+              <p className="mt-1 leading-relaxed">{caso.solucion || "—"}</p>
 
               <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-6 text-center">
                 <div>
