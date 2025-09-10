@@ -154,18 +154,20 @@ export default function Resultados() {
             <div className="max-h-[60vh] overflow-y-auto pr-2">
               {items.map((c, i) => {
                 // Campos desde el SP: id_caso, numero_caso, asunto, descripcion, departamento
-                const idCaso = c.id_caso ?? c.id ?? 0;
+                const idCaso = c.id_caso ?? c.id ?? c.numero_caso ?? 0;
                 const numero = c.numero_caso ?? "";
                 const area = c.departamento ?? "";
                 const asunto = c.asunto ?? "";
                 const descripcion = c.descripcion ?? "";
 
                 return (
-                  <div key={idCaso} className="py-3">
+                  <div key={`${idCaso}-${i}`} className="py-3">
                     <div className="flex items-start justify-between">
-                      {/* Navega al detalle con el id del caso */}
+                      {/* Navega al detalle con el id del caso y pasa el row completo */}
                       <button
-                        onClick={() => navigate(`/caso/${idCaso}`, { state: { fromQ: q } })}
+                        onClick={() =>
+                          navigate(`/caso/${idCaso}`, { state: { fromQ: q, row: c } })
+                        }
                         className="text-blue-600 font-bold hover:underline text-left"
                         title={asunto || "Ver detalle"}
                       >
