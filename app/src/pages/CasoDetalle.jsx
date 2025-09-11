@@ -162,7 +162,7 @@ export default function CasoDetalle() {
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                 <div className="flex flex-col">
                   {/* Número de caso arriba, GRANDE y negro */}
-                  <div className="font-bold text-2xl text-black">
+                  <div className="font-bold text-xl text-black">
                     Caso: {caso.numero || caso.id}
                   </div>
                   {/* Asunto debajo, mismo tamaño que "Descripción" */}
