@@ -166,7 +166,7 @@ export default function CasoDetalle() {
                     Caso: {caso.numero || caso.id}
                   </div>
                   {/* Asunto debajo, mismo tamaño que "Descripción" */}
-                  <div className="font-bold text-base mt-3">
+                  <div className="font-bold text-base mt-6">
                     {caso.asunto?.trim() || "—"}
                   </div>
                 </div>
