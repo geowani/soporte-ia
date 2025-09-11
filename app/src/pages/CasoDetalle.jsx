@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 function fmt(fecha) {
@@ -20,9 +20,9 @@ function normalize(row) {
 
   return {
     id,
-    // nuevo: conserva también el número de caso si viene separado
+    // conserva también el número de caso si viene separado
     numero: row.numero_caso ?? row.codigo ?? null,
-    // nuevo: mapea asunto con fallback a "titulo" (por si otro SP lo usa así)
+    // mapea asunto con fallback a "titulo" (por si otro SP lo usa así)
     asunto: row.asunto ?? row.titulo ?? "",
     inicio: row.fecha_creacion ?? row.inicio ?? null,
     cierre: row.fecha_cierre ?? row.cierre ?? null,
@@ -161,11 +161,13 @@ export default function CasoDetalle() {
             <>
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                 <div className="flex flex-col">
-                  <div className="font-bold text-xl">
-                    {caso.asunto?.trim() || `Caso: ${caso.numero || caso.id}`}
-                  </div>
-                  <div className="text-sm text-slate-700">
+                  {/* Número de caso arriba */}
+                  <div className="text-sm text-slate-700 font-semibold">
                     Caso: {caso.numero || caso.id}
+                  </div>
+                  {/* Asunto debajo en grande */}
+                  <div className="font-bold text-xl mt-1">
+                    {caso.asunto?.trim() || "—"}
                   </div>
                 </div>
                 <div className="text-right">
