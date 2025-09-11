@@ -1,12 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-// ❌ Quitamos el mock local:
-// import { CASOS } from "../data/casos";
 
 function fmt(fecha) {
   if (!fecha) return "—";
   try {
-    // acepta "2025-09-01" o Date
     const d = typeof fecha === "string" ? new Date(fecha + "T00:00:00") : new Date(fecha);
     return d.toLocaleDateString();
   } catch {
@@ -14,22 +11,25 @@ function fmt(fecha) {
   }
 }
 
-// Normaliza un row de la API (sp_caso_buscar o sp_caso_buscar_front) a lo que muestra tu UI
+// Normaliza un row de la API (sp_caso_buscar o variantes) a lo que muestra tu UI
 function normalize(row) {
   if (!row) return null;
-  // sp_caso_buscar => id_caso, numero_caso, asunto, descripcion, departamento (sin fechas) :contentReference[oaicite:2]{index=2}
-  // sp_caso_buscar_front => id (id_caso), codigo (numero_caso), titulo (asunto), descripcion, sistema/departamento, fecha_creacion :contentReference[oaicite:3]{index=3}
+
+  // id puede venir con distintos nombres según el SP/endpoint
   const id = row.id_caso ?? row.id ?? row.numero_caso ?? row.codigo ?? row.Id ?? null;
 
   return {
     id,
+    // nuevo: conserva también el número de caso si viene separado
+    numero: row.numero_caso ?? row.codigo ?? null,
+    // nuevo: mapea asunto con fallback a "titulo" (por si otro SP lo usa así)
+    asunto: row.asunto ?? row.titulo ?? "",
     inicio: row.fecha_creacion ?? row.inicio ?? null,
     cierre: row.fecha_cierre ?? row.cierre ?? null,
     descripcion: row.descripcion ?? "",
-    solucion: row.solucion ?? "", // si no viene, queda vacío
+    solucion: row.solucion ?? "",
     resueltoPor: row.resuelto_por ?? row.resueltoPor ?? "—",
-    departamento:
-      row.departamento ?? row.sistema ?? row.sistema_det ?? "—",
+    departamento: row.departamento ?? row.sistema ?? row.sistema_det ?? "—",
     nivel: row.nivel ?? "—",
   };
 }
@@ -76,12 +76,8 @@ export default function CasoDetalle() {
 
     (async () => {
       try {
-        // 1) intenta con el endpoint "front" (trae fecha_creacion)
-        let r = await fetch(`/api/casos-search-front?q=${encodeURIComponent(String(id))}`);
-        if (!r.ok) {
-          // 2) fallback a búsqueda básica
-          r = await fetch(`/api/casos-search?q=${encodeURIComponent(String(id))}`);
-        }
+        // Usa el search estándar del backend
+        const r = await fetch(`/api/casos-search?q=${encodeURIComponent(String(id))}`);
         if (!r.ok) throw new Error("HTTP " + r.status);
         const data = await r.json();
 
@@ -93,15 +89,13 @@ export default function CasoDetalle() {
           null;
 
         if (alive) setCaso(normalize(match));
-      } catch (err) {
+      } catch {
         if (alive) setCaso(null);
-        // (opcional) log local
-        // console.error("Error cargando caso", err);
       }
     })();
 
     return () => { alive = false; };
-  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [id, caso]);
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
@@ -132,7 +126,7 @@ export default function CasoDetalle() {
         </button>
       </div>
 
-      {/* 🔎 Buscador centrado con lupa (editable) */}
+      {/* 🔎 Buscador centrado */}
       <div className="mt-4 px-4 w-full flex justify-center">
         <div className="w-full max-w-3xl flex items-center rounded-full bg-white/85 text-slate-900 overflow-hidden shadow-inner shadow-black/10">
           <input
@@ -166,7 +160,14 @@ export default function CasoDetalle() {
           ) : (
             <>
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-                <div className="font-bold text-lg">Caso: {caso.id}</div>
+                <div className="flex flex-col">
+                  <div className="font-bold text-xl">
+                    {caso.asunto?.trim() || `Caso: ${caso.numero || caso.id}`}
+                  </div>
+                  <div className="text-sm text-slate-700">
+                    Caso: {caso.numero || caso.id}
+                  </div>
+                </div>
                 <div className="text-right">
                   <div><span className="font-bold">Inicio:</span> {fmt(caso.inicio)}</div>
                   <div><span className="font-bold">Cierre:</span> {fmt(caso.cierre)}</div>
