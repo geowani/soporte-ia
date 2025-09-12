@@ -1,41 +1,52 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
+/** Formatea fecha/hora de manera segura (acepta ISO, Date o string plano) */
 function fmt(fecha) {
   if (!fecha) return "—";
   try {
-    const d = typeof fecha === "string" ? new Date(fecha + "T00:00:00") : new Date(fecha);
-    return d.toLocaleDateString();
+    // Si ya viene ISO con hora (SP usa yyyy-MM-ddTHH:mm:ss), no agregues "T00:00:00"
+    const d = fecha instanceof Date ? fecha : new Date(fecha);
+    if (isNaN(d.getTime())) return String(fecha);
+    return d.toLocaleString(); // muestra fecha y hora local
   } catch {
     return String(fecha);
   }
 }
 
-// Normaliza un row de la API (sp_caso_buscar o variantes) a lo que muestra tu UI
+/** Normaliza un row a la forma que pinta la UI */
 function normalize(row) {
   if (!row) return null;
 
-  // id puede venir con distintos nombres según el SP/endpoint
-  const id = row.id_caso ?? row.id ?? row.numero_caso ?? row.codigo ?? row.Id ?? null;
+  // Soporta nombres de distintos endpoints/SPs
+  const id =
+    row.id_caso ?? row.id ?? row.Id ?? row.numero_caso ?? row.codigo ?? null;
 
   return {
     id,
-    // conserva también el número de caso si viene separado
+    // numero de caso (puede venir como codigo según el SP)
     numero: row.numero_caso ?? row.codigo ?? null,
-    // mapea asunto con fallback a "titulo" (por si otro SP lo usa así)
+
+    // asunto/titulo
     asunto: row.asunto ?? row.titulo ?? "",
-    inicio: row.fecha_creacion ?? row.inicio ?? null,
-    cierre: row.fecha_cierre ?? row.cierre ?? null,
+
+    // fechas: el SP de detalle devuelve inicio/cierre ISO; búsqueda podría traer fecha_creacion/fecha_cierre
+    inicio: row.inicio ?? row.fecha_creacion ?? null,
+    cierre: row.cierre ?? row.fecha_cierre ?? null,
+
     descripcion: row.descripcion ?? "",
     solucion: row.solucion ?? "",
+    // resuelto_por según el SP; resueltoPor por si lo transformaste a camelCase en el backend
     resueltoPor: row.resuelto_por ?? row.resueltoPor ?? "—",
+
+    // departamento puede venir como departamento/sistema/sistema_det dependiendo del origen
     departamento: row.departamento ?? row.sistema ?? row.sistema_det ?? "—",
     nivel: row.nivel ?? "—",
   };
 }
 
 export default function CasoDetalle() {
-  const { id } = useParams();
+  const { id } = useParams(); // tu ruta /caso/:id (id puede ser id_caso o numero_caso)
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -49,7 +60,9 @@ export default function CasoDetalle() {
   const [caso, setCaso] = useState(() => normalize(rowFromNav));
 
   // si venimos de resultados con otra búsqueda, sincroniza
-  useEffect(() => { setQ(fromQ); }, [fromQ]);
+  useEffect(() => {
+    setQ(fromQ);
+  }, [fromQ]);
 
   const doSearch = () => {
     const term = (q || "").trim();
@@ -76,13 +89,20 @@ export default function CasoDetalle() {
 
     (async () => {
       try {
-        // Usa el search estándar del backend
-        const r = await fetch(`/api/casos-search?q=${encodeURIComponent(String(id))}`);
+        // 1) Intenta endpoint de detalle que mapea al SP sp_caso_detalle
+        //    /api/casos/detalle/:id_or_numero  → { id, codigo, titulo, descripcion, departamento, nivel, inicio, cierre, solucion, resuelto_por }
+        let r = await fetch(`/api/casos/detalle/${encodeURIComponent(String(id))}`);
+        if (r.ok) {
+          const data = await r.json();
+          if (alive) setCaso(normalize(data));
+          return;
+        }
+
+        // 2) Fallback: usa tu buscador actual y trata de empatar por id_caso o numero_caso
+        r = await fetch(`/api/casos-search?q=${encodeURIComponent(String(id))}`);
         if (!r.ok) throw new Error("HTTP " + r.status);
         const data = await r.json();
-
-        // soporta formato { items: [...] } o arreglo directo
-        const items = Array.isArray(data) ? data : (data.items || []);
+        const items = Array.isArray(data) ? data : data.items || [];
         const match =
           items.find((x) => String(x.id_caso ?? x.id) === String(id)) ||
           items.find((x) => String(x.numero_caso ?? x.codigo) === String(id)) ||
@@ -94,7 +114,9 @@ export default function CasoDetalle() {
       }
     })();
 
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [id, caso]);
 
   return (
@@ -143,8 +165,12 @@ export default function CasoDetalle() {
             aria-label="Buscar"
             title="Buscar"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5 fill-slate-700">
-              <path d="M15.5 14h-.79l-.28-.27a6.471 6.471 0 0 0 1.57-4.23C16 6.01 12.99 3 9.5 3S3 6.01 3 9.5 6.01 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99 1.49-1.49-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              className="h-5 w-5 fill-slate-700"
+            >
+              <path d="M15.5 14h-.79l-.28-.27a6.471 6.471 0 0 0 1.57-4.23C16 6.01 12.99 3 9.5 3S3 6.01 3 9.5 6.01 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99 1.49-1.49-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
             </svg>
           </button>
         </div>
@@ -171,8 +197,12 @@ export default function CasoDetalle() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <div><span className="font-bold">Inicio:</span> {fmt(caso.inicio)}</div>
-                  <div><span className="font-bold">Cierre:</span> {fmt(caso.cierre)}</div>
+                  <div>
+                    <span className="font-bold">Inicio:</span> {fmt(caso.inicio)}
+                  </div>
+                  <div>
+                    <span className="font-bold">Cierre:</span> {fmt(caso.cierre)}
+                  </div>
                 </div>
               </div>
 
