@@ -1,13 +1,18 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
-/** Formateo seguro: acepta ISO o Date y muestra fecha/hora local */
+/** Formateo seguro: si la hora es 00:00:00 muestra solo la fecha */
 function fmt(fecha) {
   if (!fecha) return "—";
   try {
-    const d = fecha instanceof Date ? fecha : new Date(fecha);
-    if (isNaN(d.getTime())) return String(fecha);
-    return d.toLocaleString();
+    const d = fecha instanceof Date ? fecha : new Date(String(fecha));
+    if (isNaN(d.getTime())) {
+      // si vino como string plano, intenta extraer YYYY-MM-DD
+      const m = String(fecha).match(/^(\d{4}-\d{2}-\d{2})/);
+      return m ? m[1] : String(fecha);
+    }
+    const hasTime = d.getHours() || d.getMinutes() || d.getSeconds();
+    return hasTime ? d.toLocaleString() : d.toLocaleDateString();
   } catch {
     return String(fecha);
   }
@@ -69,8 +74,7 @@ export default function CasoDetalle() {
     return () => window.removeEventListener("keydown", onKey);
   }, [q]);
 
-  // 🚀 SIEMPRE pedir el detalle (aunque ya tengamos 'caso' preliminar),
-  // y fusionar para completar campos faltantes (inicio/cierre/solución/resuelto_por/nivel).
+  // 🚀 Siempre pedir el detalle y fusionar con el preliminar
   useEffect(() => {
     let alive = true;
 
@@ -78,15 +82,14 @@ export default function CasoDetalle() {
       setLoading(true);
       setErr("");
       try {
-        // 1) Endpoint de detalle que mapea a sp_caso_detalle
+        // Endpoint de detalle (SP sp_caso_detalle)
         const r = await fetch(`/api/casos/detalle/${encodeURIComponent(String(id))}`);
         if (!r.ok) throw new Error("HTTP " + r.status);
-        const data = await r.json(); // { id, codigo, titulo, descripcion, departamento, nivel, inicio, cierre, solucion, resuelto_por }
+        const data = await r.json();
         const det = normalize(data);
 
         if (alive) {
           setCaso((prev) => {
-            // fusionamos: lo del detalle pisa a lo del preliminar si trae datos
             const base = prev || {};
             return {
               ...base,
@@ -97,7 +100,7 @@ export default function CasoDetalle() {
           });
         }
       } catch (e) {
-        // 2) Fallback: buscar y empatar
+        // Fallback a buscador
         try {
           const r2 = await fetch(`/api/casos-search?q=${encodeURIComponent(String(id))}`);
           if (!r2.ok) throw new Error("HTTP " + r2.status);
