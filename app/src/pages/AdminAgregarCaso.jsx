@@ -5,139 +5,175 @@ export default function AdminAgregarCaso() {
   const nav = useNavigate();
 
   const [form, setForm] = useState({
+    // "caso" = número opcional. Si lo dejas vacío, el SP autogenera.
     caso: "",
-    nivel: "",
-    agente: "",
-    inicio: "",
-    lob: "",
-    cierre: "",
+    asunto: "",          // <-- Título obligatorio
+    nivel: "",           // 1..3 (opcional)
+    agente: "",          // id de usuario (opcional)
+    inicio: "",          // dd/MM/aaaa (opcional)
+    lob: "",             // opcional
+    cierre: "",          // dd/MM/aaaa (opcional)
     descripcion: "",
-    solucion: "",
+    solucion: ""
   });
 
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-  };
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = (e) => {
+  function handleChange(e) {
+    const { name, value } = e.target;
+    setForm(prev => ({ ...prev, [name]: value }));
+  }
+
+  async function handleSubmit(e) {
     e.preventDefault();
-    console.log("Formulario enviado:", form);
-    alert("Caso agregado (mock). Revisa la consola.");
-    nav("/admin");
-  };
+    setError("");
+
+    // Validación mínima
+    if (!form.asunto.trim()) {
+      setError("El campo 'Asunto' es obligatorio.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const res = await fetch("/api/casos/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          caso: form.caso,
+          asunto: form.asunto,
+          nivel: form.nivel || null,
+          agente: form.agente || null,
+          inicio: form.inicio,
+          lob: form.lob,
+          cierre: form.cierre,
+          descripcion: form.descripcion,
+          solucion: form.solucion
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "No se pudo crear el caso");
+      }
+
+      // Navega al detalle del caso recién creado
+      nav(`/admin/casos/${data.id_caso}`);
+    } catch (err) {
+      setError(err.message || "Error al enviar el formulario");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
-    <main className="min-h-screen w-full relative overflow-hidden text-white">
-      {/* Fondo */}
-      <div
-        className="absolute inset-0 -z-20"
-        style={{
-          backgroundImage: "url('/fondo.jpg')",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          backgroundRepeat: "no-repeat"
-        }}
-      />
-      <div
-        className="absolute inset-0 -z-10 opacity-45"
-        style={{
-          backgroundImage: `
-            radial-gradient(2px 2px at 20% 30%, rgba(88,164,255,.6) 40%, transparent 41%),
-            radial-gradient(2px 2px at 40% 70%, rgba(88,164,255,.45) 40%, transparent 41%),
-            radial-gradient(2px 2px at 65% 50%, rgba(88,164,255,.5) 40%, transparent 41%),
-            radial-gradient(2px 2px at 80% 20%, rgba(88,164,255,.35) 40%, transparent 41%),
-            radial-gradient(2px 2px at 15% 85%, rgba(88,164,255,.35) 40%, transparent 41%)
-          `,
-          filter: "blur(.2px)",
-          animation: "float 12s linear infinite"
-        }}
-      />
-      <style>{`@keyframes float { 0%{transform:translateY(0)} 50%{transform:translateY(-10px)} 100%{transform:translateY(0)} }`}</style>
+    <main className="min-h-screen bg-gradient-to-b from-slate-900 to-blue-900">
+      <div className="max-w-6xl mx-auto px-6 py-10">
+        <header className="flex items-center justify-between">
+          <h1 className="text-4xl font-extrabold text-white">AGREGAR CASOS</h1>
+          <button
+            onClick={() => nav(-1)}
+            className="px-4 py-2 rounded-full bg-red-500 text-white font-bold hover:bg-red-600"
+          >
+            Regresar
+          </button>
+        </header>
 
-      {/* Contenedor */}
-      <div className="min-h-screen grid place-items-center p-6">
-        <section className="w-full max-w-5xl rounded-2xl border border-white/20 p-10 md:p-14 shadow-[0_20px_60px_rgba(0,0,0,.45)] bg-white/10 backdrop-blur-md">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-8">
-            <h1 className="text-3xl md:text-4xl font-extrabold uppercase text-white">
-              Agregar Casos
-            </h1>
-            <button
-              onClick={() => nav("/admin")}
-              className="absolute right-6 top-6 px-5 py-2 rounded-full bg-red-500/90 hover:bg-red-600 font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-white/50"
-            >
-              Regresar
-            </button>
-          </div>
+        <section className="mt-8">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {error && (
+              <div className="rounded-lg bg-red-600/20 border border-red-400 text-red-200 px-4 py-3">
+                {error}
+              </div>
+            )}
 
-          {/* Formulario */}
-          <form onSubmit={handleSubmit} className="flex flex-col gap-6">
             {/* Fila 1 */}
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block font-semibold text-white">Caso</label>
+                <label className="block font-semibold text-white">Caso (opcional)</label>
                 <input
                   name="caso"
                   value={form.caso}
                   onChange={handleChange}
+                  placeholder="WEB-YYYYMMDD-0001 o vacío para autogenerar"
                   className="w-full rounded-full px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
                 />
               </div>
+
               <div>
-                <label className="block font-semibold text-white">Nivel</label>
+                <label className="block font-semibold text-white">Nivel (1-3)</label>
                 <input
                   name="nivel"
                   value={form.nivel}
                   onChange={handleChange}
+                  placeholder="1, 2 o 3"
                   className="w-full rounded-full px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
                 />
               </div>
             </div>
 
             {/* Fila 2 */}
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block font-semibold text-white">Agente</label>
+                <label className="block font-semibold text-white">Agente (ID opcional)</label>
                 <input
                   name="agente"
                   value={form.agente}
                   onChange={handleChange}
+                  placeholder="ID de usuario (opcional)"
                   className="w-full rounded-full px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
                 />
               </div>
-              <div>
-                <label className="block font-semibold text-white">Inicio</label>
-                <input
-                  type="date"
-                  name="inicio"
-                  value={form.inicio}
-                  onChange={handleChange}
-                  className="w-full rounded-full px-4 py-2 bg-gray-200 text-black"
-                />
-              </div>
-            </div>
 
-            {/* Fila 3 */}
-            <div className="grid grid-cols-2 gap-6">
               <div>
                 <label className="block font-semibold text-white">LOB</label>
                 <input
                   name="lob"
                   value={form.lob}
                   onChange={handleChange}
+                  placeholder="Línea de negocio (opcional)"
                   className="w-full rounded-full px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
                 />
               </div>
+            </div>
+
+            {/* Fila 3 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block font-semibold text-white">Inicio</label>
+                <input
+                  name="inicio"
+                  value={form.inicio}
+                  onChange={handleChange}
+                  placeholder="dd/mm/aaaa"
+                  className="w-full rounded-full px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
+                />
+              </div>
+
               <div>
                 <label className="block font-semibold text-white">Cierre</label>
                 <input
-                  type="date"
                   name="cierre"
                   value={form.cierre}
                   onChange={handleChange}
-                  className="w-full rounded-full px-4 py-2 bg-gray-200 text-black"
+                  placeholder="dd/mm/aaaa"
+                  className="w-full rounded-full px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
                 />
               </div>
+            </div>
+
+            {/* Asunto */}
+            <div>
+              <label className="block font-semibold text-white">Asunto (obligatorio)</label>
+              <input
+                name="asunto"
+                value={form.asunto}
+                onChange={handleChange}
+                placeholder="Título del caso"
+                className="w-full rounded-full px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
+                required
+              />
             </div>
 
             {/* Descripción */}
@@ -147,29 +183,29 @@ export default function AdminAgregarCaso() {
                 name="descripcion"
                 value={form.descripcion}
                 onChange={handleChange}
-                rows="3"
-                className="w-full rounded-lg px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
+                rows={5}
+                className="w-full rounded-2xl px-4 py-3 bg-gray-200 text-black"
               />
             </div>
 
-            {/* Solución */}
+            {/* Solución (opcional) */}
             <div>
-              <label className="block font-semibold text-white">Solución</label>
+              <label className="block font-semibold text-white">Solución (opcional)</label>
               <textarea
                 name="solucion"
                 value={form.solucion}
                 onChange={handleChange}
-                rows="3"
-                className="w-full rounded-lg px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
+                rows={4}
+                className="w-full rounded-2xl px-4 py-3 bg-gray-200 text-black"
               />
             </div>
 
-            {/* Botón enviar */}
             <button
               type="submit"
-              className="mt-4 mx-auto w-40 h-11 rounded-xl font-extrabold text-white bg-cyan-400 hover:bg-cyan-500 transition"
+              disabled={busy}
+              className="mt-2 mx-auto w-40 h-11 rounded-xl font-extrabold text-white bg-cyan-400 hover:bg-cyan-500 transition disabled:opacity-60"
             >
-              Enviar
+              {busy ? "Enviando..." : "Enviar"}
             </button>
           </form>
         </section>
