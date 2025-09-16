@@ -13,6 +13,7 @@ import AdminAgregarCaso from "./pages/AdminAgregarCaso";
 import AdminSugerencias from "./pages/AdminSugerencias";
 import AdminHistorial from "./pages/AdminHistorial";
 import SugerenciaExiste from "./pages/SugerenciaExiste";
+import EstadoCasoAgregado from "./pages/EstadoCasoAgregado";
 
 // utils de rol
 function normalizeRole(r) {
@@ -269,6 +270,7 @@ export default function App() {
       <Route path="/resultados" element={<Resultados />} />
       <Route path="/caso/:id" element={<CasoDetalle />} />
       <Route path="/ya-sugerido" element={<SugerenciaExiste />} />
+      <Route path="/admin/casos/estado" element={<EstadoCasoAgregado />} />
 
       <Route
         path="*"
