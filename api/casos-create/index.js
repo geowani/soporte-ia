@@ -6,7 +6,7 @@ module.exports = async function (context, req) {
     const body = (req.body || {});
 
     // ====== Campos del formulario ======
-    const numero_caso = (body.caso ?? "").toString().trim();             // opcional: si va vacío, el SP autogenera
+    const numero_caso = (body.caso ?? "").toString().trim();                  // opcional: si va vacío, el SP autogenera
     const asunto      = (body.asunto ?? body.titulo ?? "").toString().trim(); // obligatorio
     const descripcion = (body.descripcion ?? "").toString();
     const solucion    = (body.solucion ?? "").toString();
@@ -26,7 +26,7 @@ module.exports = async function (context, req) {
     const allowedDepts = new Set(["NET", "SYS", "PC", "HW"]);
     const departamento = allowedDepts.has(rawDept) ? rawDept : null;
 
-    // Logs rápidos
+    // Logs rápidos de depuración
     context.log("create-caso payload =>", {
       asunto, nivel, agente_id, departamento, tieneSolucion: solucion.trim().length > 0
     });
@@ -91,6 +91,7 @@ module.exports = async function (context, req) {
     }
 
     // ====== Post-acciones (siempre que haya id) ======
+
     // A) Forzar departamento si vino en el body (independiente de fallback)
     if (departamento) {
       await pool.request()
@@ -104,22 +105,51 @@ module.exports = async function (context, req) {
         `);
     }
 
-    // B) Si vino SOLUCIÓN y hay AGENTE, marcar "resuelto_por" en la solución creada.
-    if (solucion.trim().length > 0 && agente_id) {
-      await pool.request()
+    // B) Si vino SOLUCIÓN y (opcionalmente) hay AGENTE, asegurar fila en solucion y setear resuelto_por
+    if (solucion.trim().length > 0) {
+      // 1) ¿Existe ya solucion del SP?
+      const solRs = await pool.request()
         .input("id", sql.Int, id)
-        .input("ag", sql.Int, agente_id)
-        .query(`
-          UPDATE s
-          SET s.resuelto_por_id = @ag,
-              s.fecha_resolucion = ISNULL(s.fecha_resolucion, SYSUTCDATETIME())
-          FROM dbo.solucion s
-          WHERE s.caso_id = @id
-            AND (s.resuelto_por_id IS NULL OR s.resuelto_por_id <> @ag);
-        `);
+        .query("SELECT TOP 1 id_solucion FROM dbo.solucion WHERE caso_id = @id ORDER BY id_solucion DESC;");
+
+      // 2) Verificar si el agente existe
+      let agenteOk = null;
+      if (agente_id) {
+        const agRs = await pool.request()
+          .input("ag", sql.Int, agente_id)
+          .query("SELECT COUNT(1) AS ok FROM dbo.usuario WHERE id_usuario = @ag;");
+        agenteOk = (agRs.recordset?.[0]?.ok > 0) ? agente_id : null;
+      }
+
+      if (!solRs.recordset || solRs.recordset.length === 0) {
+        // No hay solución: la creo
+        await pool.request()
+          .input("id", sql.Int, id)
+          .input("resumen", sql.NVarChar(200), solucion.substring(0, 200))
+          .input("pasos", sql.NVarChar(sql.MAX), solucion)
+          .input("resuelto_por", sql.Int, agenteOk)
+          .query(`
+            INSERT INTO dbo.solucion (caso_id, resumen, pasos, resuelto_por_id, fecha_resolucion)
+            VALUES (@id, @resumen, @pasos, @resuelto_por, SYSUTCDATETIME());
+          `);
+      } else if (agenteOk) {
+        // Ya hay solución: actualizo resuelto_por si falta
+        await pool.request()
+          .input("id", sql.Int, id)
+          .input("ag", sql.Int, agenteOk)
+          .query(`
+            UPDATE s
+            SET s.resuelto_por_id = @ag,
+                s.fecha_resolucion = ISNULL(s.fecha_resolucion, SYSUTCDATETIME())
+            FROM dbo.solucion s
+            WHERE s.caso_id = @id
+              AND (s.resuelto_por_id IS NULL OR s.resuelto_por_id <> @ag);
+          `);
+      }
     }
 
     // ====== Respuesta ======
+    context.log("CREADO_id=", id, "DEPTO=", departamento, "AGENTE=", agente_id, "HAY_SOL=", (solucion.trim().length>0));
     context.res = {
       status: 200,
       headers: { "Content-Type": "application/json" },
