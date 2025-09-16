@@ -218,10 +218,22 @@ module.exports = async function (context, req) {
       }
     }
 
+    // ====== Obtener y devolver también el numero_caso ======
+    let numero_caso_db = null;
+    try {
+      const rsNum = await pool.request()
+        .input("id", sql.Int, id)
+        .query("SELECT numero_caso FROM dbo.caso WHERE id_caso = @id;");
+      numero_caso_db = rsNum.recordset?.[0]?.numero_caso ?? null;
+    } catch {
+      // no-op: si falla la lectura, mandamos el ingresado
+    }
+    const numero_caso_out = numero_caso_db || numero_caso || null;
+
     context.res = {
       status: 200,
       headers: { "Content-Type": "application/json" },
-      body: { ok: true, id_caso: id, usedFallback }
+      body: { ok: true, id_caso: id, numero_caso: numero_caso_out, usedFallback }
     };
   } catch (err) {
     context.log.error("POST /api/casos/create ERROR:", err);
