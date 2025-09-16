@@ -49,16 +49,27 @@ export default function AdminAgregarCaso() {
     setForm(prev => ({ ...prev, [name]: value }));
   }
 
+  // Solo dígitos para "caso"
+  function handleCasoChange(e) {
+    const soloDigitos = e.target.value.replace(/\D/g, "");
+    setForm(prev => ({ ...prev, caso: soloDigitos }));
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
 
+    // Validaciones
+    if (form.caso && !/^\d+$/.test(form.caso)) {
+      setError("El número de caso solo puede contener dígitos.");
+      return;
+    }
     if (!form.asunto.trim()) {
       setError("El campo 'Asunto' es obligatorio.");
       return;
     }
     if (!form.departamento) {
-      setError("Seleccionar");
+      setError("Selecciona un Departamento.");
       return;
     }
 
@@ -68,11 +79,11 @@ export default function AdminAgregarCaso() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          caso: form.caso,
+          caso: form.caso || null,         // vacío => que el backend autogenere si aplica
           asunto: form.asunto,
           nivel: form.nivel || null,
-          agente: form.agente || null,   // id del agente (string)
-          inicio: form.inicio,           // seguimos usando texto dd/mm/aaaa para no cambiar backend
+          agente: form.agente || null,     // id del agente (string)
+          inicio: form.inicio,             // formato dd/mm/aaaa (como tienes en backend)
           cierre: form.cierre,
           descripcion: form.descripcion,
           solucion: form.solucion,
@@ -93,7 +104,7 @@ export default function AdminAgregarCaso() {
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
-      {/* Fondo con imagen y “partículas” del componente original */}
+      {/* Fondo con imagen y “partículas” */}
       <div
         className="absolute inset-0 -z-20"
         style={{
@@ -125,7 +136,7 @@ export default function AdminAgregarCaso() {
         }
       `}</style>
 
-      {/* Contenedor tipo “card” translúcido del original */}
+      {/* Card */}
       <div className="min-h-screen grid place-items-center p-6">
         <section className="w-full max-w-5xl rounded-2xl border border-white/20 p-10 md:p-14 shadow-[0_20px_60px_rgba(0,0,0,.45)] bg-white/10 backdrop-blur-md relative">
           {/* Header */}
@@ -141,7 +152,6 @@ export default function AdminAgregarCaso() {
             </button>
           </div>
 
-          {/* Formulario funcional nuevo, con el look del original */}
           <form onSubmit={handleSubmit} className="flex flex-col gap-6">
             {error && (
               <div className="rounded-lg bg-red-600/20 border border-red-400 text-red-200 px-4 py-3">
@@ -156,8 +166,13 @@ export default function AdminAgregarCaso() {
                 <input
                   name="caso"
                   value={form.caso}
-                  onChange={handleChange}
+                  onChange={handleCasoChange}
+                  inputMode="numeric"      // teclado numérico en móviles
+                  pattern="\d*"
+                  title="Solo números"
                   placeholder="Ingrese el número de caso"
+                  autoComplete="off"
+                  maxLength={20}
                   className="w-full rounded-full px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
                 />
               </div>
@@ -220,7 +235,7 @@ export default function AdminAgregarCaso() {
               </div>
             </div>
 
-            {/* Fila 3: Inicio / Cierre (dejamos texto dd/mm/aaaa para no romper formato del backend) */}
+            {/* Fila 3: Inicio / Cierre */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block font-semibold text-white">Inicio</label>
@@ -271,7 +286,7 @@ export default function AdminAgregarCaso() {
 
             {/* Solución */}
             <div>
-              <label className="block font-semibold text-white">Solución</label>
+              <label className="block font-semibold text-white">Solución (opcional)</label>
               <textarea
                 name="solucion"
                 value={form.solucion}
@@ -281,7 +296,6 @@ export default function AdminAgregarCaso() {
               />
             </div>
 
-            {/* Botón enviar */}
             <button
               type="submit"
               disabled={busy}
