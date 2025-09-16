@@ -5,17 +5,16 @@ export default function AdminAgregarCaso() {
   const nav = useNavigate();
 
   const [form, setForm] = useState({
-    // "caso" = número opcional. Si lo dejas vacío, el SP autogenera.
     caso: "",
-    asunto: "",          // Título obligatorio
-    nivel: "",           // 1..3 (opcional)
-    agente: "",          // id de usuario (opcional) - se selecciona por nombre
-    inicio: "",          // dd/MM/aaaa (opcional)
-    lob: "",             // opcional
-    cierre: "",          // dd/MM/aaaa (opcional)
+    asunto: "",
+    nivel: "",
+    agente: "",          // id de usuario seleccionado (string)
+    inicio: "",
+    lob: "",
+    cierre: "",
     descripcion: "",
     solucion: "",
-    departamento: ""     // NET | SYS | PC | HW
+    departamento: ""
   });
 
   const [usuarios, setUsuarios] = useState([]);
@@ -23,18 +22,27 @@ export default function AdminAgregarCaso() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // Cargar agentes por nombre
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         setUsuariosLoading(true);
-        const r = await fetch("/api/usuarios-list");
+        // cache-buster para evitar caché agresiva del navegador/CDN
+        const r = await fetch(`/api/usuarios-list?t=${Date.now()}`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const data = await r.json();
         if (!cancelled) {
+          console.log("usuarios-list >", data); // <-- deja este log para verificar en consola
           setUsuarios(Array.isArray(data) ? data : []);
         }
-      } catch {
-        if (!cancelled) setUsuarios([]);
+      } catch (e) {
+        console.error("Fallo usuarios-list:", e);
+        if (!cancelled) {
+          setUsuarios([]);
+          // solo muestra error si aún no hay otro error visible del formulario
+          setError(prev => prev || "No se pudo cargar la lista de agentes.");
+        }
       } finally {
         if (!cancelled) setUsuariosLoading(false);
       }
@@ -51,7 +59,6 @@ export default function AdminAgregarCaso() {
     e.preventDefault();
     setError("");
 
-    // Validaciones mínimas
     if (!form.asunto.trim()) {
       setError("El campo 'Asunto' es obligatorio.");
       return;
@@ -70,7 +77,7 @@ export default function AdminAgregarCaso() {
           caso: form.caso,
           asunto: form.asunto,
           nivel: form.nivel || null,
-          agente: form.agente || null,                 // se envía el ID del agente seleccionado
+          agente: form.agente || null,                 // <- id como string; el backend ya lo parsea
           inicio: form.inicio,
           lob: form.lob,
           cierre: form.cierre,
@@ -81,11 +88,8 @@ export default function AdminAgregarCaso() {
       });
 
       const data = await res.json();
-      if (!res.ok || !data?.ok) {
-        throw new Error(data?.error || "No se pudo crear el caso");
-      }
+      if (!res.ok || !data?.ok) throw new Error(data?.error || "No se pudo crear el caso");
 
-      // Ir al detalle del caso creado
       nav(`/admin/casos/${data.id_caso}`);
     } catch (err) {
       setError(err.message || "Error al enviar el formulario");
@@ -151,16 +155,21 @@ export default function AdminAgregarCaso() {
                   className="w-full rounded-full px-4 py-2 bg-gray-200 text-black"
                   disabled={usuariosLoading}
                 >
-                  <option value="">{usuariosLoading ? "Cargando..." : "(sin asignar)"}</option>
+                  <option value="">
+                    {usuariosLoading ? "Cargando..." : "(sin asignar)"}
+                  </option>
+
+                  {/* Si no hay usuarios y no está cargando, muestra una pista */}
+                  {!usuariosLoading && usuarios.length === 0 && (
+                    <option value="" disabled>No hay agentes</option>
+                  )}
+
                   {usuarios.map(u => (
-                    <option key={u.id_usuario} value={u.id_usuario}>
+                    <option key={u.id_usuario} value={String(u.id_usuario)}>
                       {u.nombre}
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-blue-200 mt-1">
-                  Selecciona por <strong>nombre</strong>; se enviará el ID correcto automáticamente.
-                </p>
               </div>
 
               <div>
