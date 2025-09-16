@@ -7,13 +7,13 @@ export default function AdminAgregarCaso() {
   const [form, setForm] = useState({
     caso: "",
     asunto: "",
-    nivel: "",            // select 1..3
-    agente: "",           // id de usuario (string)
-    inicio: "",
-    cierre: "",
+    nivel: "",
+    agente: "",
+    inicio: "",       // ahora: solo dígitos (ddmmaaaa)
+    cierre: "",       // ahora: solo dígitos (ddmmaaaa)
     descripcion: "",
     solucion: "",
-    departamento: ""      // NET | SYS | PC | HW
+    departamento: ""
   });
 
   const [usuarios, setUsuarios] = useState([]);
@@ -35,7 +35,7 @@ export default function AdminAgregarCaso() {
         console.error("Fallo usuarios-list:", e);
         if (!cancelled) {
           setUsuarios([]);
-          setError(prev => prev || "No se pudo cargar la lista de agentes.");
+          setError((prev) => prev || "No se pudo cargar la lista de agentes.");
         }
       } finally {
         if (!cancelled) setUsuariosLoading(false);
@@ -46,14 +46,25 @@ export default function AdminAgregarCaso() {
 
   function handleChange(e) {
     const { name, value } = e.target;
-    setForm(prev => ({ ...prev, [name]: value }));
+    setForm((prev) => ({ ...prev, [name]: value }));
   }
 
   // Solo dígitos para "caso"
   function handleCasoChange(e) {
     const soloDigitos = e.target.value.replace(/\D/g, "");
-    setForm(prev => ({ ...prev, caso: soloDigitos }));
+    setForm((prev) => ({ ...prev, caso: soloDigitos }));
   }
+
+  // Solo dígitos para "inicio" y "cierre" (máx 8 -> ddmmaaaa)
+  function handleFechaDigits(name, e) {
+    const soloDigitos = e.target.value.replace(/\D/g, "").slice(0, 8);
+    setForm((prev) => ({ ...prev, [name]: soloDigitos }));
+  }
+
+  const toDDMMYYYY = (digits) =>
+    digits && digits.length === 8
+      ? `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`
+      : null;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -72,6 +83,17 @@ export default function AdminAgregarCaso() {
       setError("Selecciona un Departamento.");
       return;
     }
+    if (form.inicio && form.inicio.length !== 8) {
+      setError("Inicio debe tener 8 dígitos (ddmmaaaa).");
+      return;
+    }
+    if (form.cierre && form.cierre.length !== 8) {
+      setError("Cierre debe tener 8 dígitos (ddmmaaaa).");
+      return;
+    }
+
+    const inicioFmt = toDDMMYYYY(form.inicio);
+    const cierreFmt = toDDMMYYYY(form.cierre);
 
     setBusy(true);
     try {
@@ -79,12 +101,13 @@ export default function AdminAgregarCaso() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          caso: form.caso || null,         // vacío => que el backend autogenere si aplica
+          caso: form.caso || null,
           asunto: form.asunto,
           nivel: form.nivel || null,
-          agente: form.agente || null,     // id del agente (string)
-          inicio: form.inicio,             // formato dd/mm/aaaa (como tienes en backend)
-          cierre: form.cierre,
+          agente: form.agente || null,
+          // enviamos en formato dd/MM/aaaa si se ingresaron 8 dígitos
+          inicio: inicioFmt,
+          cierre: cierreFmt,
           descripcion: form.descripcion,
           solucion: form.solucion,
           departamento: (form.departamento || "").toUpperCase()
@@ -93,7 +116,6 @@ export default function AdminAgregarCaso() {
 
       const data = await res.json();
       if (!res.ok || !data?.ok) throw new Error(data?.error || "No se pudo crear el caso");
-
       nav(`/admin/casos/${data.id_caso}`);
     } catch (err) {
       setError(err.message || "Error al enviar el formulario");
@@ -104,7 +126,7 @@ export default function AdminAgregarCaso() {
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
-      {/* Fondo con imagen y “partículas” */}
+      {/* Fondo con imagen + “partículas” (estilo original) */}
       <div
         className="absolute inset-0 -z-20"
         style={{
@@ -152,6 +174,7 @@ export default function AdminAgregarCaso() {
             </button>
           </div>
 
+          {/* Formulario */}
           <form onSubmit={handleSubmit} className="flex flex-col gap-6">
             {error && (
               <div className="rounded-lg bg-red-600/20 border border-red-400 text-red-200 px-4 py-3">
@@ -167,7 +190,7 @@ export default function AdminAgregarCaso() {
                   name="caso"
                   value={form.caso}
                   onChange={handleCasoChange}
-                  inputMode="numeric"      // teclado numérico en móviles
+                  inputMode="numeric"
                   pattern="\d*"
                   title="Solo números"
                   placeholder="Ingrese el número de caso"
@@ -209,7 +232,7 @@ export default function AdminAgregarCaso() {
                   {!usuariosLoading && usuarios.length === 0 && (
                     <option value="" disabled>No hay agentes</option>
                   )}
-                  {usuarios.map(u => (
+                  {usuarios.map((u) => (
                     <option key={u.id_usuario} value={String(u.id_usuario)}>
                       {u.nombre}
                     </option>
@@ -235,15 +258,19 @@ export default function AdminAgregarCaso() {
               </div>
             </div>
 
-            {/* Fila 3: Inicio / Cierre */}
+            {/* Fila 3: Inicio / Cierre (solo dígitos) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block font-semibold text-white">Inicio</label>
                 <input
                   name="inicio"
                   value={form.inicio}
-                  onChange={handleChange}
-                  placeholder="dd/mm/aaaa"
+                  onChange={(e) => handleFechaDigits("inicio", e)}
+                  inputMode="numeric"
+                  pattern="\d*"
+                  title="8 dígitos: ddmmaaaa"
+                  placeholder="ddmmaaaa"
+                  maxLength={8}
                   className="w-full rounded-full px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
                 />
               </div>
@@ -252,8 +279,12 @@ export default function AdminAgregarCaso() {
                 <input
                   name="cierre"
                   value={form.cierre}
-                  onChange={handleChange}
-                  placeholder="dd/mm/aaaa"
+                  onChange={(e) => handleFechaDigits("cierre", e)}
+                  inputMode="numeric"
+                  pattern="\d*"
+                  title="8 dígitos: ddmmaaaa"
+                  placeholder="ddmmaaaa"
+                  maxLength={8}
                   className="w-full rounded-full px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
                 />
               </div>
