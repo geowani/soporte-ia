@@ -6,11 +6,9 @@ function toISODateFromDMY(s) {
   if (!s) return null;
   const m = /^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/.exec(String(s).trim());
   if (!m) return null;
-  const [ , dd, mm, yyyy ] = m;
-  // valida calendario básico
+  const [, dd, mm, yyyy] = m;
   const iso = `${yyyy}-${mm}-${dd}`;
   const d = new Date(`${iso}T00:00:00Z`);
-  // chequeo rápido: el mes y día coinciden
   if (Number.isNaN(d.getTime())) return null;
   return iso; // yyyy-MM-dd
 }
@@ -26,14 +24,14 @@ module.exports = async function (context, req) {
     const solucion    = (body.solucion ?? "").toString();
     const lob         = (body.lob ?? "").toString().trim() || null;
 
-    const nivel = (body.nivel !== undefined && body.nivel !== "" && !Number.isNaN(parseInt(body.nivel,10)))
-      ? parseInt(body.nivel,10) : null;
+    const nivel = (body.nivel !== undefined && body.nivel !== "" && !Number.isNaN(parseInt(body.nivel, 10)))
+      ? parseInt(body.nivel, 10) : null;
 
     // Entradas desde el form (dd/MM/yyyy)
     const inicio_raw = (body.inicio ?? "").toString().trim();
     const cierre_raw = (body.cierre ?? "").toString().trim();
 
-    // Normaliza a ISO yyyy-MM-dd (para SQL Server es inequívoco)
+    // Normaliza a ISO yyyy-MM-dd para consultas SQL inequívocas
     const inicioISO = toISODateFromDMY(inicio_raw);
     const cierreISO = toISODateFromDMY(cierre_raw);
 
@@ -46,9 +44,13 @@ module.exports = async function (context, req) {
       return;
     }
 
+    // Para el SP: mandamos exactamente dd/MM/yyyy como NVARCHAR(10)
+    const inicioFmt = inicioISO ? inicio_raw : null;
+    const cierreFmt = cierreISO ? cierre_raw : null;
+
     // Departamento: NET|SYS|PC|HW o null
     const rawDept = (body.departamento ?? "").toString().toUpperCase().trim();
-    const allowedDepts = new Set(["NET","SYS","PC","HW"]);
+    const allowedDepts = new Set(["NET", "SYS", "PC", "HW"]);
     const departamento = allowedDepts.has(rawDept) ? rawDept : null;
 
     // === Agente: permitir id o nombre ===
@@ -135,8 +137,9 @@ module.exports = async function (context, req) {
         .input("agente_id",    sql.Int,            agente_id) // <- puede ser null
         .input("lob",          sql.NVarChar(100),  lob)
         .input("nivel",        sql.Int,            nivel)
-        .input("fecha_inicio", sql.Date,           inicioISO || null)  // <-- Date!
-        .input("fecha_cierre", sql.Date,           cierreISO || null)  // <-- Date!
+        // ⬇⬇ MANDAR COMO NVARCHAR(10) dd/MM/yyyy PARA EL SP
+        .input("fecha_inicio", sql.NVarChar(10),   inicioFmt || null)
+        .input("fecha_cierre", sql.NVarChar(10),   cierreFmt || null)
         .input("solucion_txt", sql.NVarChar(sql.MAX), solucion)
         .input("departamento", sql.NVarChar(100),  departamento)
         .execute("[dbo].[sp_caso_crear]");
@@ -158,8 +161,9 @@ module.exports = async function (context, req) {
         .input("agente_id",    sql.Int,            agente_id)
         .input("lob",          sql.NVarChar(100),  lob)
         .input("nivel",        sql.Int,            nivel)
-        .input("fecha_inicio", sql.Date,           inicioISO || null)  // <-- Date!
-        .input("fecha_cierre", sql.Date,           cierreISO || null)  // <-- Date!
+        // ⬇⬇ igual en fallback
+        .input("fecha_inicio", sql.NVarChar(10),   inicioFmt || null)
+        .input("fecha_cierre", sql.NVarChar(10),   cierreFmt || null)
         .input("solucion_txt", sql.NVarChar(sql.MAX), solucion)
         .execute("[dbo].[sp_caso_crear]");
     }
@@ -192,7 +196,7 @@ module.exports = async function (context, req) {
       if (!solRs.recordset || solRs.recordset.length === 0) {
         await pool.request()
           .input("id", sql.Int, id)
-          .input("resumen", sql.NVarChar(200), solucion.substring(0,200))
+          .input("resumen", sql.NVarChar(200), solucion.substring(0, 200))
           .input("pasos", sql.NVarChar(sql.MAX), solucion)
           .input("resuelto_por", sql.Int, agente_id || null)
           .query(`
