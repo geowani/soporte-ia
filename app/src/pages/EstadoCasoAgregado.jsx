@@ -53,23 +53,6 @@ export default function EstadoCasoAgregado() {
               </p>
             )}
           </div>
-
-          <div className="mt-8 flex flex-wrap gap-4 justify-center">
-            {id && (
-              <Link
-                to={`/admin/casos/${id}`}
-                className="px-5 py-3 rounded-xl bg-green-500 hover:bg-green-600 font-semibold text-white"
-              >
-                Ver caso
-              </Link>
-            )}
-            <button
-              onClick={() => nav("/admin/agregar-caso")}
-              className="px-5 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-600 font-semibold text-white"
-            >
-              Agregar otro
-            </button>
-          </div>
         </section>
       </div>
     </main>
