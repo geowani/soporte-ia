@@ -9,8 +9,8 @@ export default function AdminAgregarCaso() {
     asunto: "",
     nivel: "",
     agente: "",
-    inicio: "",       // ahora: solo dígitos (ddmmaaaa)
-    cierre: "",       // ahora: solo dígitos (ddmmaaaa)
+    inicio: "",       // ahora: solo dígitos (dd/mm/aaaa)
+    cierre: "",       // ahora: solo dígitos (dd/mm/aaaa)
     descripcion: "",
     solucion: "",
     departamento: ""
