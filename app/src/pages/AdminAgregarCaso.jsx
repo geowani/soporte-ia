@@ -7,13 +7,13 @@ export default function AdminAgregarCaso() {
   const [form, setForm] = useState({
     caso: "",
     asunto: "",
-    nivel: "",
-    agente: "",          // id de usuario seleccionado (string)
+    nivel: "",            // ahora lo llenamos desde un <select>
+    agente: "",           // id de usuario (string)
     inicio: "",
     cierre: "",
     descripcion: "",
     solucion: "",
-    departamento: ""     // NET | SYS | PC | HW (obligatorio)
+    departamento: ""      // NET | SYS | PC | HW
   });
 
   const [usuarios, setUsuarios] = useState([]);
@@ -27,18 +27,15 @@ export default function AdminAgregarCaso() {
     (async () => {
       try {
         setUsuariosLoading(true);
-        // cache-buster para evitar caché agresiva
         const r = await fetch(`/api/usuarios-list?t=${Date.now()}`);
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const data = await r.json();
-        if (!cancelled) {
-          setUsuarios(Array.isArray(data) ? data : []);
-        }
+        if (!cancelled) setUsuarios(Array.isArray(data) ? data : []);
       } catch (e) {
         console.error("Fallo usuarios-list:", e);
         if (!cancelled) {
           setUsuarios([]);
-          setError(prev => prev || "No se pudo cargar la lista de agentes.");
+          setError((prev) => prev || "No se pudo cargar la lista de agentes.");
         }
       } finally {
         if (!cancelled) setUsuariosLoading(false);
@@ -49,7 +46,7 @@ export default function AdminAgregarCaso() {
 
   function handleChange(e) {
     const { name, value } = e.target;
-    setForm(prev => ({ ...prev, [name]: value }));
+    setForm((prev) => ({ ...prev, [name]: value }));
   }
 
   async function handleSubmit(e) {
@@ -73,8 +70,8 @@ export default function AdminAgregarCaso() {
         body: JSON.stringify({
           caso: form.caso,
           asunto: form.asunto,
-          nivel: form.nivel || null,
-          agente: form.agente || null,          // id como string; el backend ya lo parsea
+          nivel: form.nivel || null,          // lo recibe el backend y lo parsea a int
+          agente: form.agente || null,        // id del agente seleccionado (string)
           inicio: form.inicio,
           cierre: form.cierre,
           descripcion: form.descripcion,
@@ -130,17 +127,21 @@ export default function AdminAgregarCaso() {
 
               <div>
                 <label className="block font-semibold text-white">Nivel (1-3)</label>
-                <input
+                <select
                   name="nivel"
                   value={form.nivel}
                   onChange={handleChange}
-                  placeholder="1, 2 o 3"
-                  className="w-full rounded-full px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
-                />
+                  className="w-full rounded-full px-4 py-2 bg-gray-200 text-black"
+                >
+                  <option value="">Selecciona…</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                </select>
               </div>
             </div>
 
-            {/* Fila 2: Agente / Departamento (Departamento reemplaza a LOB) */}
+            {/* Fila 2: Agente / Departamento */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block font-semibold text-white">Agente</label>
@@ -157,7 +158,7 @@ export default function AdminAgregarCaso() {
                   {!usuariosLoading && usuarios.length === 0 && (
                     <option value="" disabled>No hay agentes</option>
                   )}
-                  {usuarios.map(u => (
+                  {usuarios.map((u) => (
                     <option key={u.id_usuario} value={String(u.id_usuario)}>
                       {u.nombre}
                     </option>
