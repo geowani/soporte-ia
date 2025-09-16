@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 export default function AdminAgregarCaso() {
   const nav = useNavigate();
 
-  // ruta de pantalla de éxito
+  // Ruta de pantalla de resultado
   const SUCCESS_URL = "/admin/casos/estado";
 
   const [form, setForm] = useState({
@@ -37,7 +37,7 @@ export default function AdminAgregarCaso() {
 
   const toDDMMYYYY = (masked) => {
     const d = onlyDigits(masked);
-    return d.length === 8 ? `${d.slice(0,2)}/${d.slice(2,4)}/${d.slice(4)}` : null;
+    return d.length === 8 ? `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}` : null;
   };
 
   // ---------- data ----------
@@ -135,13 +135,27 @@ export default function AdminAgregarCaso() {
 
       const data = await res.json();
 
-      if (res.ok && data?.ok && data?.id_caso) {
-        // ✅ éxito → pantalla de confirmación
-        nav(`${SUCCESS_URL}?id=${encodeURIComponent(data.id_caso)}`, { replace: true });
+      // Duplicado: 409 del backend
+      if (res.status === 409 || data?.error === "DUPLICATE_CASE") {
+        const numOut = form.caso || data?.numero_caso || "";
+        nav(
+          `${SUCCESS_URL}?ok=0&reason=dup&num=${encodeURIComponent(numOut)}`,
+          { replace: true }
+        );
         return;
       }
 
-      // otros casos no OK → mostrar banner con mensaje del backend si viene
+      // Éxito
+      if (res.ok && data?.ok && data?.id_caso) {
+        const numOut = data?.numero_caso || form.caso || "";
+        nav(
+          `${SUCCESS_URL}?ok=1&id=${encodeURIComponent(data.id_caso)}&num=${encodeURIComponent(numOut)}`,
+          { replace: true }
+        );
+        return;
+      }
+
+      // Otros errores con mensaje del backend
       throw new Error(data?.detail || data?.error || "No se pudo crear el caso");
     } catch (err) {
       setError(err.message || "Error al enviar el formulario");
