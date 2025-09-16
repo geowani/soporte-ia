@@ -58,7 +58,7 @@ export default function AdminAgregarCaso() {
       return;
     }
     if (!form.departamento) {
-      setError("Selecciona un Departamento.");
+      setError("Seleccionar");
       return;
     }
 
@@ -152,12 +152,12 @@ export default function AdminAgregarCaso() {
             {/* Fila 1: Caso / Nivel */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block font-semibold text-white">Caso (opcional)</label>
+                <label className="block font-semibold text-white">Caso</label>
                 <input
                   name="caso"
                   value={form.caso}
                   onChange={handleChange}
-                  placeholder="WEB-YYYYMMDD-0001 o vacío para autogenerar"
+                  placeholder="Ingrese el número de caso"
                   className="w-full rounded-full px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
                 />
               </div>
@@ -169,7 +169,7 @@ export default function AdminAgregarCaso() {
                   onChange={handleChange}
                   className="w-full rounded-full px-4 py-2 bg-gray-200 text-black"
                 >
-                  <option value="">Selecciona…</option>
+                  <option value="">Seleccionar</option>
                   <option value="1">1</option>
                   <option value="2">2</option>
                   <option value="3">3</option>
@@ -189,7 +189,7 @@ export default function AdminAgregarCaso() {
                   disabled={usuariosLoading}
                 >
                   <option value="">
-                    {usuariosLoading ? "Cargando..." : "(sin asignar)"}
+                    {usuariosLoading ? "Cargando..." : "Seleccionar"}
                   </option>
                   {!usuariosLoading && usuarios.length === 0 && (
                     <option value="" disabled>No hay agentes</option>
@@ -211,7 +211,7 @@ export default function AdminAgregarCaso() {
                   className="w-full rounded-full px-4 py-2 bg-gray-200 text-black"
                   required
                 >
-                  <option value="">Selecciona…</option>
+                  <option value="">Seleccionar</option>
                   <option value="NET">NET</option>
                   <option value="SYS">SYS</option>
                   <option value="PC">PC</option>
@@ -246,7 +246,7 @@ export default function AdminAgregarCaso() {
 
             {/* Asunto */}
             <div>
-              <label className="block font-semibold text-white">Asunto (obligatorio)</label>
+              <label className="block font-semibold text-white">Asunto</label>
               <input
                 name="asunto"
                 value={form.asunto}
@@ -271,7 +271,7 @@ export default function AdminAgregarCaso() {
 
             {/* Solución */}
             <div>
-              <label className="block font-semibold text-white">Solución (opcional)</label>
+              <label className="block font-semibold text-white">Solución</label>
               <textarea
                 name="solucion"
                 value={form.solucion}
