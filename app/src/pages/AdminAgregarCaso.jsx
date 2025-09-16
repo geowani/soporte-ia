@@ -4,13 +4,16 @@ import { useNavigate } from "react-router-dom";
 export default function AdminAgregarCaso() {
   const nav = useNavigate();
 
+  // ruta de pantalla de éxito
+  const SUCCESS_URL = "/admin/casos/estado";
+
   const [form, setForm] = useState({
     caso: "",
     asunto: "",
     nivel: "",
     agente: "",
-    inicio: "",       // se muestra con máscara dd/mm/aaaa
-    cierre: "",       // se muestra con máscara dd/mm/aaaa
+    inicio: "",       // máscara dd/mm/aaaa
+    cierre: "",       // máscara dd/mm/aaaa
     descripcion: "",
     solucion: "",
     departamento: ""
@@ -131,8 +134,15 @@ export default function AdminAgregarCaso() {
       });
 
       const data = await res.json();
-      if (!res.ok || !data?.ok) throw new Error(data?.error || "No se pudo crear el caso");
-      nav(`/admin/casos/${data.id_caso}`);
+
+      if (res.ok && data?.ok && data?.id_caso) {
+        // ✅ éxito → pantalla de confirmación
+        nav(`${SUCCESS_URL}?id=${encodeURIComponent(data.id_caso)}`, { replace: true });
+        return;
+      }
+
+      // otros casos no OK → mostrar banner con mensaje del backend si viene
+      throw new Error(data?.detail || data?.error || "No se pudo crear el caso");
     } catch (err) {
       setError(err.message || "Error al enviar el formulario");
     } finally {
@@ -278,7 +288,6 @@ export default function AdminAgregarCaso() {
                   onChange={(e) => handleFechaMasked("inicio", e)}
                   onPaste={(e) => handleFechaPaste("inicio", e)}
                   inputMode="numeric"
-                  // permitimos "/" visualmente; la máscara la gestiona JS
                   pattern="[0-9/]*"
                   title="Formato: dd/mm/aaaa"
                   placeholder="dd/mm/aaaa"
