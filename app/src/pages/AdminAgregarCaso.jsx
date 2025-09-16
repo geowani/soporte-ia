@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 export default function AdminAgregarCaso() {
@@ -7,19 +7,40 @@ export default function AdminAgregarCaso() {
   const [form, setForm] = useState({
     // "caso" = número opcional. Si lo dejas vacío, el SP autogenera.
     caso: "",
-    asunto: "",          // <-- Título obligatorio
+    asunto: "",          // Título obligatorio
     nivel: "",           // 1..3 (opcional)
-    agente: "",          // id de usuario (opcional)
+    agente: "",          // id de usuario (opcional) - se selecciona por nombre
     inicio: "",          // dd/MM/aaaa (opcional)
     lob: "",             // opcional
     cierre: "",          // dd/MM/aaaa (opcional)
     descripcion: "",
     solucion: "",
-    departamento: ""     // <-- NUEVO
+    departamento: ""     // NET | SYS | PC | HW
   });
 
-  const [busy, setBusy] = useState(false);
+  const [usuarios, setUsuarios] = useState([]);
+  const [usuariosLoading, setUsuariosLoading] = useState(true);
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setUsuariosLoading(true);
+        const r = await fetch("/api/usuarios-list");
+        const data = await r.json();
+        if (!cancelled) {
+          setUsuarios(Array.isArray(data) ? data : []);
+        }
+      } catch {
+        if (!cancelled) setUsuarios([]);
+      } finally {
+        if (!cancelled) setUsuariosLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   function handleChange(e) {
     const { name, value } = e.target;
@@ -30,7 +51,7 @@ export default function AdminAgregarCaso() {
     e.preventDefault();
     setError("");
 
-    // Validación mínima
+    // Validaciones mínimas
     if (!form.asunto.trim()) {
       setError("El campo 'Asunto' es obligatorio.");
       return;
@@ -49,13 +70,12 @@ export default function AdminAgregarCaso() {
           caso: form.caso,
           asunto: form.asunto,
           nivel: form.nivel || null,
-          agente: form.agente || null,
+          agente: form.agente || null,                 // se envía el ID del agente seleccionado
           inicio: form.inicio,
           lob: form.lob,
           cierre: form.cierre,
           descripcion: form.descripcion,
           solucion: form.solucion,
-          // Enviar SIEMPRE el departamento (en mayúsculas)
           departamento: (form.departamento || "").toUpperCase()
         })
       });
@@ -65,7 +85,7 @@ export default function AdminAgregarCaso() {
         throw new Error(data?.error || "No se pudo crear el caso");
       }
 
-      // Navega al detalle del caso recién creado
+      // Ir al detalle del caso creado
       nav(`/admin/casos/${data.id_caso}`);
     } catch (err) {
       setError(err.message || "Error al enviar el formulario");
@@ -123,14 +143,24 @@ export default function AdminAgregarCaso() {
             {/* Fila 2 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block font-semibold text-white">Agente (ID opcional)</label>
-                <input
+                <label className="block font-semibold text-white">Agente</label>
+                <select
                   name="agente"
                   value={form.agente}
                   onChange={handleChange}
-                  placeholder="ID de usuario (opcional)"
-                  className="w-full rounded-full px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
-                />
+                  className="w-full rounded-full px-4 py-2 bg-gray-200 text-black"
+                  disabled={usuariosLoading}
+                >
+                  <option value="">{usuariosLoading ? "Cargando..." : "(sin asignar)"}</option>
+                  {usuarios.map(u => (
+                    <option key={u.id_usuario} value={u.id_usuario}>
+                      {u.nombre}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-blue-200 mt-1">
+                  Selecciona por <strong>nombre</strong>; se enviará el ID correcto automáticamente.
+                </p>
               </div>
 
               <div>
@@ -170,7 +200,7 @@ export default function AdminAgregarCaso() {
               </div>
             </div>
 
-            {/* Departamento (NUEVO) */}
+            {/* Departamento */}
             <div>
               <label className="block font-semibold text-white">Departamento</label>
               <select
