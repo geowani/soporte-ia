@@ -6,27 +6,37 @@ module.exports = async function (context, req) {
     const body = (req.body || {});
 
     // ====== Campos del formulario ======
-    const numero_caso = (body.caso || "").toString().trim();            // opcional: si va vacío, el SP autogenera
-    const nivel       = body.nivel ? parseInt(body.nivel, 10) : null;    // 1..3 o null
-    const agente_id   = body.agente ? parseInt(body.agente, 10) : null;  // opcional (para "resuelto por")
-    const lob         = (body.lob || "").toString().trim() || null;
-    const inicio      = (body.inicio || "").toString().trim() || null;   // dd/MM/yyyy
-    const cierre      = (body.cierre || "").toString().trim() || null;   // dd/MM/yyyy
-    const asunto      = (body.asunto || body.titulo || "").toString().trim(); // obligatorio
-    const descripcion = (body.descripcion || "").toString();
-    const solucion    = (body.solucion || "").toString();
+    const numero_caso = (body.caso ?? "").toString().trim();             // opcional: si va vacío, el SP autogenera
+    const asunto      = (body.asunto ?? body.titulo ?? "").toString().trim(); // obligatorio
+    const descripcion = (body.descripcion ?? "").toString();
+    const solucion    = (body.solucion ?? "").toString();
+    const lob         = (body.lob ?? "").toString().trim() || null;
+
+    const nivel = (body.nivel !== undefined && body.nivel !== "" && !Number.isNaN(parseInt(body.nivel,10)))
+      ? parseInt(body.nivel,10) : null;
+
+    const agente_id = (body.agente !== undefined && body.agente !== "" && !Number.isNaN(parseInt(body.agente,10)))
+      ? parseInt(body.agente,10) : null;
+
+    const inicio = (body.inicio ?? "").toString().trim() || null;  // dd/MM/yyyy
+    const cierre = (body.cierre ?? "").toString().trim() || null;  // dd/MM/yyyy
 
     // Normaliza/valida departamento (acepta vacío o NET|SYS|PC|HW)
-    const rawDept = (body.departamento || "").toString().toUpperCase().trim();
+    const rawDept = (body.departamento ?? "").toString().toUpperCase().trim();
     const allowedDepts = new Set(["NET", "SYS", "PC", "HW"]);
     const departamento = allowedDepts.has(rawDept) ? rawDept : null;
 
-    // ====== Validaciones simples ======
+    // Logs rápidos
+    context.log("create-caso payload =>", {
+      asunto, nivel, agente_id, departamento, tieneSolucion: solucion.trim().length > 0
+    });
+
+    // ====== Validaciones ======
     if (!asunto) {
       context.res = { status: 400, body: { error: "El campo 'asunto' (título) es obligatorio." } };
       return;
     }
-    if (nivel !== null && (Number.isNaN(nivel) || nivel < 1 || nivel > 3)) {
+    if (nivel !== null && (nivel < 1 || nivel > 3)) {
       context.res = { status: 400, body: { error: "El campo 'nivel' debe ser 1, 2 o 3." } };
       return;
     }
@@ -56,8 +66,7 @@ module.exports = async function (context, req) {
         msg.includes("expects parameter") ||
         msg.includes("too many arguments") ||
         msg.includes("parámetro") ||
-        msg.includes("parameter") ||
-        msg.includes("no se encontró el procedimiento");
+        msg.includes("parameter");
 
       if (!looksParamIssue) throw e1; // otro error real
 
@@ -76,42 +85,47 @@ module.exports = async function (context, req) {
     }
 
     const id = rs?.recordset?.[0]?.id_caso;
+    if (!id) {
+      context.res = { status: 500, body: { error: "No se recibió id_caso desde el SP." } };
+      return;
+    }
 
-    // ====== Post-acciones ======
-    if (id) {
-      // A) Si caímos al fallback y sí hay departamento, actualiza el registro recién creado.
-      if (usedFallback && departamento) {
-        await pool.request()
-          .input("id",   sql.Int, id)
-          .input("dpto", sql.NVarChar(100), departamento)
-          .query("UPDATE dbo.caso SET departamento = @dpto WHERE id_caso = @id;");
-      }
+    // ====== Post-acciones (siempre que haya id) ======
+    // A) Forzar departamento si vino en el body (independiente de fallback)
+    if (departamento) {
+      await pool.request()
+        .input("id",   sql.Int, id)
+        .input("dpto", sql.NVarChar(100), departamento)
+        .query(`
+          UPDATE dbo.caso
+          SET departamento = @dpto
+          WHERE id_caso = @id
+            AND (departamento IS NULL OR departamento <> @dpto);
+        `);
+    }
 
-      // B) Si vino SOLUCIÓN y hay AGENTE, marca "resuelto_por" en la solución creada.
-      const haySol = (solucion && solucion.trim().length > 0);
-      if (haySol && agente_id) {
-        await pool.request()
-          .input("id", sql.Int, id)
-          .input("ag", sql.Int, agente_id)
-          .query(`
-            UPDATE s
-              SET s.resuelto_por_id = @ag,
-                  s.fecha_resolucion = ISNULL(s.fecha_resolucion, SYSUTCDATETIME())
-            FROM dbo.solucion s
-            WHERE s.caso_id = @id
-              AND s.resuelto_por_id IS NULL;
-          `);
-      }
+    // B) Si vino SOLUCIÓN y hay AGENTE, marcar "resuelto_por" en la solución creada.
+    if (solucion.trim().length > 0 && agente_id) {
+      await pool.request()
+        .input("id", sql.Int, id)
+        .input("ag", sql.Int, agente_id)
+        .query(`
+          UPDATE s
+          SET s.resuelto_por_id = @ag,
+              s.fecha_resolucion = ISNULL(s.fecha_resolucion, SYSUTCDATETIME())
+          FROM dbo.solucion s
+          WHERE s.caso_id = @id
+            AND (s.resuelto_por_id IS NULL OR s.resuelto_por_id <> @ag);
+        `);
     }
 
     // ====== Respuesta ======
     context.res = {
       status: 200,
       headers: { "Content-Type": "application/json" },
-      body: { ok: true, id_caso: id || null }
+      body: { ok: true, id_caso: id }
     };
   } catch (err) {
-    // Log y error legible
     context.log.error("POST /api/casos/create ERROR:", err);
     const msg = err?.originalError?.info?.message || err.message || "Error creando el caso";
     context.res = {
