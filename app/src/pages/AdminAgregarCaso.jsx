@@ -9,8 +9,8 @@ export default function AdminAgregarCaso() {
     asunto: "",
     nivel: "",
     agente: "",
-    inicio: "",       // mostrado como dd/mm/aaaa (máscara en vivo)
-    cierre: "",       // mostrado como dd/mm/aaaa (máscara en vivo)
+    inicio: "",       // se muestra con máscara dd/mm/aaaa
+    cierre: "",       // se muestra con máscara dd/mm/aaaa
     descripcion: "",
     solucion: "",
     departamento: ""
@@ -21,14 +21,15 @@ export default function AdminAgregarCaso() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // -------- utils --------
+  // ---------- utils ----------
   const onlyDigits = (s = "") => s.replace(/\D/g, "");
 
+  // Aplica máscara dd/mm/aaaa a partir de dígitos
   const maskFecha = (value) => {
     const d = onlyDigits(value).slice(0, 8); // ddmmaaaa
     if (d.length <= 2) return d;
     if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`;
-    return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`; // dd/mm/aaaa
+    return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
   };
 
   const toDDMMYYYY = (masked) => {
@@ -36,9 +37,7 @@ export default function AdminAgregarCaso() {
     return d.length === 8 ? `${d.slice(0,2)}/${d.slice(2,4)}/${d.slice(4)}` : null;
   };
 
-  // -----------------------
-
-  // Cargar agentes
+  // ---------- data ----------
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -61,20 +60,26 @@ export default function AdminAgregarCaso() {
     return () => { cancelled = true; };
   }, []);
 
+  // -------- handlers --------
   function handleChange(e) {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
   }
 
-  // Solo dígitos para "caso"
   function handleCasoChange(e) {
     const solo = onlyDigits(e.target.value);
     setForm((prev) => ({ ...prev, caso: solo }));
   }
 
-  // Máscara en vivo dd/mm/aaaa para inicio/cierre
   function handleFechaMasked(name, e) {
     const masked = maskFecha(e.target.value);
+    setForm((prev) => ({ ...prev, [name]: masked }));
+  }
+
+  function handleFechaPaste(name, e) {
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData).getData("text") || "";
+    const masked = maskFecha(text);
     setForm((prev) => ({ ...prev, [name]: masked }));
   }
 
@@ -82,7 +87,6 @@ export default function AdminAgregarCaso() {
     e.preventDefault();
     setError("");
 
-    // Validaciones
     if (form.caso && !/^\d+$/.test(form.caso)) {
       setError("El número de caso solo puede contener dígitos.");
       return;
@@ -96,20 +100,17 @@ export default function AdminAgregarCaso() {
       return;
     }
 
-    const inicioDigits = onlyDigits(form.inicio);
-    const cierreDigits = onlyDigits(form.cierre);
-
-    if (form.inicio && inicioDigits.length !== 8) {
-      setError("Inicio debe tener 8 dígitos (ddmmaaaa).");
-      return;
-    }
-    if (form.cierre && cierreDigits.length !== 8) {
-      setError("Cierre debe tener 8 dígitos (ddmmaaaa).");
-      return;
-    }
-
-    const inicioFmt = toDDMMYYYY(form.inicio); // null si vacío o incompleto
+    const inicioFmt = toDDMMYYYY(form.inicio);
     const cierreFmt = toDDMMYYYY(form.cierre);
+
+    if (form.inicio && !inicioFmt) {
+      setError("Inicio debe tener 8 dígitos (dd/mm/aaaa).");
+      return;
+    }
+    if (form.cierre && !cierreFmt) {
+      setError("Cierre debe tener 8 dígitos (dd/mm/aaaa).");
+      return;
+    }
 
     setBusy(true);
     try {
@@ -121,8 +122,8 @@ export default function AdminAgregarCaso() {
           asunto: form.asunto,
           nivel: form.nivel || null,
           agente: form.agente || null,
-          inicio: inicioFmt, // dd/MM/aaaa o null
-          cierre: cierreFmt, // dd/MM/aaaa o null
+          inicio: inicioFmt,     // dd/MM/aaaa o null
+          cierre: cierreFmt,     // dd/MM/aaaa o null
           descripcion: form.descripcion,
           solucion: form.solucion,
           departamento: (form.departamento || "").toUpperCase()
@@ -139,9 +140,9 @@ export default function AdminAgregarCaso() {
     }
   }
 
+  // ---------- UI (estilo con fondo original) ----------
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
-      {/* Fondo + partículas (estilo original) */}
       <div
         className="absolute inset-0 -z-20"
         style={{
@@ -173,10 +174,8 @@ export default function AdminAgregarCaso() {
         }
       `}</style>
 
-      {/* Card */}
       <div className="min-h-screen grid place-items-center p-6">
         <section className="w-full max-w-5xl rounded-2xl border border-white/20 p-10 md:p-14 shadow-[0_20px_60px_rgba(0,0,0,.45)] bg-white/10 backdrop-blur-md relative">
-          {/* Header */}
           <div className="flex items-center justify-between mb-8">
             <h1 className="text-3xl md:text-4xl font-extrabold uppercase text-white">
               Agregar Casos
@@ -189,7 +188,6 @@ export default function AdminAgregarCaso() {
             </button>
           </div>
 
-          {/* Formulario */}
           <form onSubmit={handleSubmit} className="flex flex-col gap-6">
             {error && (
               <div className="rounded-lg bg-red-600/20 border border-red-400 text-red-200 px-4 py-3">
@@ -241,9 +239,7 @@ export default function AdminAgregarCaso() {
                   className="w-full rounded-full px-4 py-2 bg-gray-200 text-black"
                   disabled={usuariosLoading}
                 >
-                  <option value="">
-                    {usuariosLoading ? "Cargando..." : "Seleccionar"}
-                  </option>
+                  <option value="">{usuariosLoading ? "Cargando..." : "Seleccionar"}</option>
                   {!usuariosLoading && usuarios.length === 0 && (
                     <option value="" disabled>No hay agentes</option>
                   )}
@@ -254,7 +250,6 @@ export default function AdminAgregarCaso() {
                   ))}
                 </select>
               </div>
-
               <div>
                 <label className="block font-semibold text-white">Departamento</label>
                 <select
@@ -273,7 +268,7 @@ export default function AdminAgregarCaso() {
               </div>
             </div>
 
-            {/* Fila 3: Inicio / Cierre (máscara con / en vivo) */}
+            {/* Fila 3: Inicio / Cierre con máscara visible */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block font-semibold text-white">Inicio</label>
@@ -281,11 +276,13 @@ export default function AdminAgregarCaso() {
                   name="inicio"
                   value={form.inicio}
                   onChange={(e) => handleFechaMasked("inicio", e)}
+                  onPaste={(e) => handleFechaPaste("inicio", e)}
                   inputMode="numeric"
-                  pattern="\d*"
+                  // permitimos "/" visualmente; la máscara la gestiona JS
+                  pattern="[0-9/]*"
                   title="Formato: dd/mm/aaaa"
                   placeholder="dd/mm/aaaa"
-                  maxLength={10}  // dd/mm/aaaa
+                  maxLength={10}
                   className="w-full rounded-full px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
                 />
               </div>
@@ -295,8 +292,9 @@ export default function AdminAgregarCaso() {
                   name="cierre"
                   value={form.cierre}
                   onChange={(e) => handleFechaMasked("cierre", e)}
+                  onPaste={(e) => handleFechaPaste("cierre", e)}
                   inputMode="numeric"
-                  pattern="\d*"
+                  pattern="[0-9/]*"
                   title="Formato: dd/mm/aaaa"
                   placeholder="dd/mm/aaaa"
                   maxLength={10}
