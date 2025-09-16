@@ -213,7 +213,7 @@ export default function AdminAgregarCaso() {
                 />
               </div>
               <div>
-                <label className="block font-semibold text-white">Nivel (1-3)</label>
+                <label className="block font-semibold text-white">Nivel</label>
                 <select
                   name="nivel"
                   value={form.nivel}
