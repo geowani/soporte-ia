@@ -14,7 +14,8 @@ export default function AdminAgregarCaso() {
     lob: "",             // opcional
     cierre: "",          // dd/MM/aaaa (opcional)
     descripcion: "",
-    solucion: ""
+    solucion: "",
+    departamento: ""     // <-- NUEVO
   });
 
   const [busy, setBusy] = useState(false);
@@ -34,6 +35,10 @@ export default function AdminAgregarCaso() {
       setError("El campo 'Asunto' es obligatorio.");
       return;
     }
+    if (!form.departamento) {
+      setError("Selecciona un Departamento.");
+      return;
+    }
 
     setBusy(true);
     try {
@@ -49,7 +54,9 @@ export default function AdminAgregarCaso() {
           lob: form.lob,
           cierre: form.cierre,
           descripcion: form.descripcion,
-          solucion: form.solucion
+          solucion: form.solucion,
+          // Enviar SIEMPRE el departamento (en mayúsculas)
+          departamento: (form.departamento || "").toUpperCase()
         })
       });
 
@@ -161,6 +168,24 @@ export default function AdminAgregarCaso() {
                   className="w-full rounded-full px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
                 />
               </div>
+            </div>
+
+            {/* Departamento (NUEVO) */}
+            <div>
+              <label className="block font-semibold text-white">Departamento</label>
+              <select
+                name="departamento"
+                value={form.departamento}
+                onChange={handleChange}
+                className="w-full rounded-full px-4 py-2 bg-gray-200 text-black"
+                required
+              >
+                <option value="">Selecciona…</option>
+                <option value="NET">NET</option>
+                <option value="SYS">SYS</option>
+                <option value="PC">PC</option>
+                <option value="HW">HW</option>
+              </select>
             </div>
 
             {/* Asunto */}
