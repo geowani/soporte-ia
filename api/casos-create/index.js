@@ -117,7 +117,7 @@ module.exports = async function (context, req) {
           status: 409,
           headers: { "Content-Type": "application/json" },
           body: {
-            error: "DUPLICATE_CASE",
+            error: "Ya existe el caso en el sistema",
             detail: "Ya existe un caso con el mismo número, fecha de inicio y cierre."
           }
         };
