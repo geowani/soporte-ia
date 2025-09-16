@@ -1,6 +1,20 @@
 // POST /api/casos/create
 const { getPool, sql } = require("../_db");
 
+// convierte "dd/MM/yyyy" -> "yyyy-MM-dd"
+function toISODateFromDMY(s) {
+  if (!s) return null;
+  const m = /^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/.exec(String(s).trim());
+  if (!m) return null;
+  const [ , dd, mm, yyyy ] = m;
+  // valida calendario básico
+  const iso = `${yyyy}-${mm}-${dd}`;
+  const d = new Date(`${iso}T00:00:00Z`);
+  // chequeo rápido: el mes y día coinciden
+  if (Number.isNaN(d.getTime())) return null;
+  return iso; // yyyy-MM-dd
+}
+
 module.exports = async function (context, req) {
   try {
     const body = (req.body || {});
@@ -15,8 +29,22 @@ module.exports = async function (context, req) {
     const nivel = (body.nivel !== undefined && body.nivel !== "" && !Number.isNaN(parseInt(body.nivel,10)))
       ? parseInt(body.nivel,10) : null;
 
-    const inicio = (body.inicio ?? "").toString().trim() || null;  // dd/MM/yyyy
-    const cierre = (body.cierre ?? "").toString().trim() || null;  // dd/MM/yyyy
+    // Entradas desde el form (dd/MM/yyyy)
+    const inicio_raw = (body.inicio ?? "").toString().trim();
+    const cierre_raw = (body.cierre ?? "").toString().trim();
+
+    // Normaliza a ISO yyyy-MM-dd (para SQL Server es inequívoco)
+    const inicioISO = toISODateFromDMY(inicio_raw);
+    const cierreISO = toISODateFromDMY(cierre_raw);
+
+    if (inicio_raw && !inicioISO) {
+      context.res = { status: 400, body: { error: "Formato de 'Inicio' inválido. Usa dd/mm/aaaa." } };
+      return;
+    }
+    if (cierre_raw && !cierreISO) {
+      context.res = { status: 400, body: { error: "Formato de 'Cierre' inválido. Usa dd/mm/aaaa." } };
+      return;
+    }
 
     // Departamento: NET|SYS|PC|HW o null
     const rawDept = (body.departamento ?? "").toString().toUpperCase().trim();
@@ -51,7 +79,6 @@ module.exports = async function (context, req) {
         .input("q", sql.NVarChar(200), agente_nombre)
         .input("like", sql.NVarChar(210), `%${agente_nombre}%`)
         .query(`
-          -- Exacto primero
           ;WITH cte AS (
             SELECT id_usuario, 1 AS score
             FROM dbo.usuario
@@ -70,20 +97,19 @@ module.exports = async function (context, req) {
     // =============================
     // PRE-CHEQUEO DE DUPLICADO
     // Regla: MISMO numero_caso_norm + MISMO fecha_creacion_dia + MISMO fecha_cierre_dia
-    // (solo se chequea si vienen los tres valores)
     // =============================
     const numeroCasoNorm = (numero_caso || "").toString().trim().toUpperCase();
-    if (numeroCasoNorm && inicio && cierre) {
+    if (numeroCasoNorm && inicioISO && cierreISO) {
       const rsDup = await pool.request()
         .input("num", sql.VarChar(40), numeroCasoNorm)
-        .input("fi",  sql.NVarChar(10), inicio)  // dd/MM/yyyy
-        .input("fc",  sql.NVarChar(10), cierre)  // dd/MM/yyyy
+        .input("fi",  sql.Date, inicioISO)   // yyyy-MM-dd
+        .input("fc",  sql.Date, cierreISO)   // yyyy-MM-dd
         .query(`
           SELECT TOP 1 id_caso
           FROM dbo.caso
           WHERE numero_caso_norm = @num
-            AND fecha_creacion_dia = CAST(@fi AS date)
-            AND CAST(fecha_cierre AS date) = CAST(@fc AS date)
+            AND fecha_creacion_dia = @fi
+            AND CAST(fecha_cierre AS date) = @fc
         `);
 
       if (rsDup.recordset && rsDup.recordset.length > 0) {
@@ -99,7 +125,7 @@ module.exports = async function (context, req) {
       }
     }
 
-    // ====== Intento 1: llamar SP con @departamento ======
+    // ====== Llamada al SP ======
     let rs, usedFallback = false;
     try {
       rs = await pool.request()
@@ -109,8 +135,8 @@ module.exports = async function (context, req) {
         .input("agente_id",    sql.Int,            agente_id) // <- puede ser null
         .input("lob",          sql.NVarChar(100),  lob)
         .input("nivel",        sql.Int,            nivel)
-        .input("fecha_inicio", sql.NVarChar(10),   inicio)
-        .input("fecha_cierre", sql.NVarChar(10),   cierre)
+        .input("fecha_inicio", sql.Date,           inicioISO || null)  // <-- Date!
+        .input("fecha_cierre", sql.Date,           cierreISO || null)  // <-- Date!
         .input("solucion_txt", sql.NVarChar(sql.MAX), solucion)
         .input("departamento", sql.NVarChar(100),  departamento)
         .execute("[dbo].[sp_caso_crear]");
@@ -132,8 +158,8 @@ module.exports = async function (context, req) {
         .input("agente_id",    sql.Int,            agente_id)
         .input("lob",          sql.NVarChar(100),  lob)
         .input("nivel",        sql.Int,            nivel)
-        .input("fecha_inicio", sql.NVarChar(10),   inicio)
-        .input("fecha_cierre", sql.NVarChar(10),   cierre)
+        .input("fecha_inicio", sql.Date,           inicioISO || null)  // <-- Date!
+        .input("fecha_cierre", sql.Date,           cierreISO || null)  // <-- Date!
         .input("solucion_txt", sql.NVarChar(sql.MAX), solucion)
         .execute("[dbo].[sp_caso_crear]");
     }
@@ -163,7 +189,6 @@ module.exports = async function (context, req) {
       const solRs = await pool.request()
         .input("id", sql.Int, id)
         .query("SELECT TOP 1 id_solucion FROM dbo.solucion WHERE caso_id = @id ORDER BY id_solucion DESC;");
-      // si no hay, la creo
       if (!solRs.recordset || solRs.recordset.length === 0) {
         await pool.request()
           .input("id", sql.Int, id)
@@ -197,7 +222,7 @@ module.exports = async function (context, req) {
   } catch (err) {
     context.log.error("POST /api/casos/create ERROR:", err);
 
-    // Detectar violaciones de índice único (duplicado)
+    // Violación de índice único (duplicado)
     const sqlNum =
       err?.number ??
       err?.code ??
