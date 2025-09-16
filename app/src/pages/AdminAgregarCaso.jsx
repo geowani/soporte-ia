@@ -330,7 +330,7 @@ export default function AdminAgregarCaso() {
 
             {/* Solución */}
             <div>
-              <label className="block font-semibold text-white">Solución (opcional)</label>
+              <label className="block font-semibold text-white">Solución</label>
               <textarea
                 name="solucion"
                 value={form.solucion}
