@@ -1,17 +1,40 @@
 import { useMemo } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 function useQS() {
   const { search, state } = useLocation();
-  // soporta querystring y/o state al navegar
   const qs = useMemo(() => new URLSearchParams(search), [search]);
-  const idFromQS = qs.get("id");
-  return { id: state?.id ?? idFromQS };
+
+  // Compatibilidad: primero state, luego querystring
+  const okQS = qs.get("ok");
+  const ok =
+    state?.ok ??
+    (okQS === "1" || okQS === "true" || okQS === "yes" ? true :
+     okQS === "0" || okQS === "false" ? false : undefined);
+
+  const id  = state?.id  ?? qs.get("id")  ?? null;
+  const num = state?.num ?? qs.get("num") ?? null;
+  const reason = state?.reason ?? qs.get("reason") ?? null;
+
+  return { ok, id, num, reason };
 }
 
 export default function EstadoCasoAgregado() {
-  const { id } = useQS();
+  const { ok, id, num, reason } = useQS();
   const nav = useNavigate();
+
+  const isSuccess  = ok === true || (ok === undefined && !!id); // fallback si no viene ok
+  const isDuplicate = ok === false && reason === "dup";
+
+  // Textos según estado
+  const title = "Panel de Administrador";
+  const mainMsg = isSuccess
+    ? "Muchas gracias, su caso fue agregado exitosamente al sistema."
+    : isDuplicate
+      ? "Este número de caso ya existe en el sistema."
+      : "No se pudo completar la operación.";
+
+  const icon = isSuccess ? "✅" : "❌";
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
@@ -37,21 +60,31 @@ export default function EstadoCasoAgregado() {
       <div className="min-h-screen grid place-items-center p-6">
         <section className="w-full max-w-4xl">
           <h1 className="text-center text-3xl md:text-4xl font-extrabold mb-8">
-            Panel de Administrador
+            {title}
           </h1>
 
           <div className="mx-auto max-w-2xl rounded-2xl bg-white/10 border border-white/20 p-10 md:p-12 text-center shadow-[0_20px_60px_rgba(0,0,0,.45)] backdrop-blur-md">
             <p className="text-xl md:text-2xl font-semibold leading-relaxed">
-              Muchas gracias, su caso fue agregado exitosamente al sistema.
+              {mainMsg}
             </p>
 
-            <div className="text-7xl mt-6">✅</div>
+            <div className={`text-7xl mt-6 ${isSuccess ? "" : "drop-shadow-lg"}`}>
+              {icon}
+            </div>
 
-            {id && (
-              <p className="mt-4 text-white/90">
-                ID del caso: <b>{id}</b>
-              </p>
-            )}
+            {/* Datos del caso */}
+            <div className="mt-5 space-y-1 text-white/90">
+              {num && (
+                <p>
+                  Número de caso: <b>{num}</b>
+                </p>
+              )}
+              {isSuccess && id && (
+                <p>
+                  ID interno: <b>{id}</b>
+                </p>
+              )}
+            </div>
           </div>
         </section>
       </div>
