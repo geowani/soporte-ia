@@ -10,11 +10,10 @@ export default function AdminAgregarCaso() {
     nivel: "",
     agente: "",          // id de usuario seleccionado (string)
     inicio: "",
-    lob: "",
     cierre: "",
     descripcion: "",
     solucion: "",
-    departamento: ""
+    departamento: ""     // NET | SYS | PC | HW (obligatorio)
   });
 
   const [usuarios, setUsuarios] = useState([]);
@@ -28,19 +27,17 @@ export default function AdminAgregarCaso() {
     (async () => {
       try {
         setUsuariosLoading(true);
-        // cache-buster para evitar caché agresiva del navegador/CDN
+        // cache-buster para evitar caché agresiva
         const r = await fetch(`/api/usuarios-list?t=${Date.now()}`);
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const data = await r.json();
         if (!cancelled) {
-          console.log("usuarios-list >", data); // <-- deja este log para verificar en consola
           setUsuarios(Array.isArray(data) ? data : []);
         }
       } catch (e) {
         console.error("Fallo usuarios-list:", e);
         if (!cancelled) {
           setUsuarios([]);
-          // solo muestra error si aún no hay otro error visible del formulario
           setError(prev => prev || "No se pudo cargar la lista de agentes.");
         }
       } finally {
@@ -77,9 +74,8 @@ export default function AdminAgregarCaso() {
           caso: form.caso,
           asunto: form.asunto,
           nivel: form.nivel || null,
-          agente: form.agente || null,                 // <- id como string; el backend ya lo parsea
+          agente: form.agente || null,          // id como string; el backend ya lo parsea
           inicio: form.inicio,
-          lob: form.lob,
           cierre: form.cierre,
           descripcion: form.descripcion,
           solucion: form.solucion,
@@ -119,7 +115,7 @@ export default function AdminAgregarCaso() {
               </div>
             )}
 
-            {/* Fila 1 */}
+            {/* Fila 1: Caso / Nivel */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block font-semibold text-white">Caso (opcional)</label>
@@ -144,7 +140,7 @@ export default function AdminAgregarCaso() {
               </div>
             </div>
 
-            {/* Fila 2 */}
+            {/* Fila 2: Agente / Departamento (Departamento reemplaza a LOB) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block font-semibold text-white">Agente</label>
@@ -158,12 +154,9 @@ export default function AdminAgregarCaso() {
                   <option value="">
                     {usuariosLoading ? "Cargando..." : "(sin asignar)"}
                   </option>
-
-                  {/* Si no hay usuarios y no está cargando, muestra una pista */}
                   {!usuariosLoading && usuarios.length === 0 && (
                     <option value="" disabled>No hay agentes</option>
                   )}
-
                   {usuarios.map(u => (
                     <option key={u.id_usuario} value={String(u.id_usuario)}>
                       {u.nombre}
@@ -173,18 +166,24 @@ export default function AdminAgregarCaso() {
               </div>
 
               <div>
-                <label className="block font-semibold text-white">LOB</label>
-                <input
-                  name="lob"
-                  value={form.lob}
+                <label className="block font-semibold text-white">Departamento</label>
+                <select
+                  name="departamento"
+                  value={form.departamento}
                   onChange={handleChange}
-                  placeholder="Línea de negocio (opcional)"
-                  className="w-full rounded-full px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
-                />
+                  className="w-full rounded-full px-4 py-2 bg-gray-200 text-black"
+                  required
+                >
+                  <option value="">Selecciona…</option>
+                  <option value="NET">NET</option>
+                  <option value="SYS">SYS</option>
+                  <option value="PC">PC</option>
+                  <option value="HW">HW</option>
+                </select>
               </div>
             </div>
 
-            {/* Fila 3 */}
+            {/* Fila 3: Inicio / Cierre */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block font-semibold text-white">Inicio</label>
@@ -207,24 +206,6 @@ export default function AdminAgregarCaso() {
                   className="w-full rounded-full px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
                 />
               </div>
-            </div>
-
-            {/* Departamento */}
-            <div>
-              <label className="block font-semibold text-white">Departamento</label>
-              <select
-                name="departamento"
-                value={form.departamento}
-                onChange={handleChange}
-                className="w-full rounded-full px-4 py-2 bg-gray-200 text-black"
-                required
-              >
-                <option value="">Selecciona…</option>
-                <option value="NET">NET</option>
-                <option value="SYS">SYS</option>
-                <option value="PC">PC</option>
-                <option value="HW">HW</option>
-              </select>
             </div>
 
             {/* Asunto */}
