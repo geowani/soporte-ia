@@ -53,8 +53,7 @@ module.exports = async function (context, req) {
         .query(`
           -- Exacto primero
           ;WITH cte AS (
-            SELECT id_usuario,
-                   1 AS score
+            SELECT id_usuario, 1 AS score
             FROM dbo.usuario
             WHERE nombre = @q OR nombre_completo = @q
             UNION ALL
@@ -66,6 +65,38 @@ module.exports = async function (context, req) {
           SELECT TOP 1 id_usuario FROM cte ORDER BY score DESC, id_usuario;
         `);
       agente_id = rsAg.recordset?.[0]?.id_usuario || null;
+    }
+
+    // =============================
+    // PRE-CHEQUEO DE DUPLICADO
+    // Regla: MISMO numero_caso_norm + MISMO fecha_creacion_dia + MISMO fecha_cierre_dia
+    // (solo se chequea si vienen los tres valores)
+    // =============================
+    const numeroCasoNorm = (numero_caso || "").toString().trim().toUpperCase();
+    if (numeroCasoNorm && inicio && cierre) {
+      const rsDup = await pool.request()
+        .input("num", sql.VarChar(40), numeroCasoNorm)
+        .input("fi",  sql.NVarChar(10), inicio)  // dd/MM/yyyy
+        .input("fc",  sql.NVarChar(10), cierre)  // dd/MM/yyyy
+        .query(`
+          SELECT TOP 1 id_caso
+          FROM dbo.caso
+          WHERE numero_caso_norm = @num
+            AND fecha_creacion_dia = CAST(@fi AS date)
+            AND CAST(fecha_cierre AS date) = CAST(@fc AS date)
+        `);
+
+      if (rsDup.recordset && rsDup.recordset.length > 0) {
+        context.res = {
+          status: 409,
+          headers: { "Content-Type": "application/json" },
+          body: {
+            error: "DUPLICATE_CASE",
+            detail: "Ya existe un caso con el mismo número, fecha de inicio y cierre."
+          }
+        };
+        return;
+      }
     }
 
     // ====== Intento 1: llamar SP con @departamento ======
@@ -161,10 +192,35 @@ module.exports = async function (context, req) {
     context.res = {
       status: 200,
       headers: { "Content-Type": "application/json" },
-      body: { ok: true, id_caso: id }
+      body: { ok: true, id_caso: id, usedFallback }
     };
   } catch (err) {
     context.log.error("POST /api/casos/create ERROR:", err);
+
+    // Detectar violaciones de índice único (duplicado)
+    const sqlNum =
+      err?.number ??
+      err?.code ??
+      err?.originalError?.info?.number ?? null;
+
+    const isDup =
+      sqlNum === 2601 ||
+      sqlNum === 2627 ||
+      /duplicate key|violation of unique/i.test(err?.message || '') ||
+      /UX_caso_numero_inicio_cierre/i.test(err?.message || '');
+
+    if (isDup) {
+      context.res = {
+        status: 409,
+        headers: { "Content-Type": "application/json" },
+        body: {
+          error: "DUPLICATE_CASE",
+          detail: "Ya existe un caso con el mismo número, fecha de inicio y cierre."
+        }
+      };
+      return;
+    }
+
     const msg = err?.originalError?.info?.message || err.message || "Error creando el caso";
     context.res = {
       status: 500,
