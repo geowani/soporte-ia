@@ -6,7 +6,7 @@ module.exports = async function (context, req) {
     const body = (req.body || {});
 
     // ====== Campos del formulario ======
-    const numero_caso = (body.caso ?? "").toString().trim();                  // opcional: si va vacío, el SP autogenera
+    const numero_caso = (body.caso ?? "").toString().trim();                  // opcional
     const asunto      = (body.asunto ?? body.titulo ?? "").toString().trim(); // obligatorio
     const descripcion = (body.descripcion ?? "").toString();
     const solucion    = (body.solucion ?? "").toString();
@@ -15,21 +15,23 @@ module.exports = async function (context, req) {
     const nivel = (body.nivel !== undefined && body.nivel !== "" && !Number.isNaN(parseInt(body.nivel,10)))
       ? parseInt(body.nivel,10) : null;
 
-    const agente_id = (body.agente !== undefined && body.agente !== "" && !Number.isNaN(parseInt(body.agente,10)))
-      ? parseInt(body.agente,10) : null;
-
     const inicio = (body.inicio ?? "").toString().trim() || null;  // dd/MM/yyyy
     const cierre = (body.cierre ?? "").toString().trim() || null;  // dd/MM/yyyy
 
-    // Normaliza/valida departamento (acepta vacío o NET|SYS|PC|HW)
+    // Departamento: NET|SYS|PC|HW o null
     const rawDept = (body.departamento ?? "").toString().toUpperCase().trim();
-    const allowedDepts = new Set(["NET", "SYS", "PC", "HW"]);
+    const allowedDepts = new Set(["NET","SYS","PC","HW"]);
     const departamento = allowedDepts.has(rawDept) ? rawDept : null;
 
-    // Logs rápidos de depuración
-    context.log("create-caso payload =>", {
-      asunto, nivel, agente_id, departamento, tieneSolucion: solucion.trim().length > 0
-    });
+    // === Agente: permitir id o nombre ===
+    let agente_id = null;
+    let agente_nombre = (body.agente_nombre ?? "").toString().trim();
+    const agente_raw = (body.agente ?? "").toString().trim();
+
+    if (agente_raw) {
+      if (/^\d+$/.test(agente_raw)) agente_id = parseInt(agente_raw, 10);
+      else agente_nombre = agente_raw; // venía como texto en 'agente'
+    }
 
     // ====== Validaciones ======
     if (!asunto) {
@@ -43,23 +45,45 @@ module.exports = async function (context, req) {
 
     const pool = await getPool();
 
-    // ====== Intento 1: llamar SP con @departamento (si tu SP ya lo soporta) ======
+    // Si NO vino id pero SÍ nombre, resuélvelo a id
+    if (!agente_id && agente_nombre) {
+      const rsAg = await pool.request()
+        .input("q", sql.NVarChar(200), agente_nombre)
+        .input("like", sql.NVarChar(210), `%${agente_nombre}%`)
+        .query(`
+          -- Exacto primero
+          ;WITH cte AS (
+            SELECT id_usuario,
+                   1 AS score
+            FROM dbo.usuario
+            WHERE nombre = @q OR nombre_completo = @q
+            UNION ALL
+            SELECT TOP 1 id_usuario, 0 AS score
+            FROM dbo.usuario
+            WHERE nombre LIKE @like OR nombre_completo LIKE @like
+            ORDER BY nombre
+          )
+          SELECT TOP 1 id_usuario FROM cte ORDER BY score DESC, id_usuario;
+        `);
+      agente_id = rsAg.recordset?.[0]?.id_usuario || null;
+    }
+
+    // ====== Intento 1: llamar SP con @departamento ======
     let rs, usedFallback = false;
     try {
       rs = await pool.request()
         .input("numero_caso",  sql.VarChar(40),    numero_caso || null)
         .input("asunto",       sql.VarChar(200),   asunto)
         .input("descripcion",  sql.NVarChar(sql.MAX), descripcion)
-        .input("agente_id",    sql.Int,            agente_id)
+        .input("agente_id",    sql.Int,            agente_id) // <- puede ser null
         .input("lob",          sql.NVarChar(100),  lob)
         .input("nivel",        sql.Int,            nivel)
-        .input("fecha_inicio", sql.NVarChar(10),   inicio)   // dd/MM/yyyy
-        .input("fecha_cierre", sql.NVarChar(10),   cierre)   // dd/MM/yyyy
+        .input("fecha_inicio", sql.NVarChar(10),   inicio)
+        .input("fecha_cierre", sql.NVarChar(10),   cierre)
         .input("solucion_txt", sql.NVarChar(sql.MAX), solucion)
-        .input("departamento", sql.NVarChar(100),  departamento) // <--- nuevo
+        .input("departamento", sql.NVarChar(100),  departamento)
         .execute("[dbo].[sp_caso_crear]");
     } catch (e1) {
-      // Si el SP no tiene @departamento, reintenta sin ese parámetro
       const msg = (e1 && e1.message) ? e1.message.toLowerCase() : "";
       const looksParamIssue =
         msg.includes("@departamento") ||
@@ -67,8 +91,7 @@ module.exports = async function (context, req) {
         msg.includes("too many arguments") ||
         msg.includes("parámetro") ||
         msg.includes("parameter");
-
-      if (!looksParamIssue) throw e1; // otro error real
+      if (!looksParamIssue) throw e1;
 
       usedFallback = true;
       rs = await pool.request()
@@ -90,9 +113,8 @@ module.exports = async function (context, req) {
       return;
     }
 
-    // ====== Post-acciones (siempre que haya id) ======
-
-    // A) Forzar departamento si vino en el body (independiente de fallback)
+    // ====== Post-acciones ======
+    // A) Forzar departamento si vino en el body
     if (departamento) {
       await pool.request()
         .input("id",   sql.Int, id)
@@ -105,38 +127,26 @@ module.exports = async function (context, req) {
         `);
     }
 
-    // B) Si vino SOLUCIÓN y (opcionalmente) hay AGENTE, asegurar fila en solucion y setear resuelto_por
+    // B) Asegurar solución y resuelto_por (si mandaste solución)
     if (solucion.trim().length > 0) {
-      // 1) ¿Existe ya solucion del SP?
       const solRs = await pool.request()
         .input("id", sql.Int, id)
         .query("SELECT TOP 1 id_solucion FROM dbo.solucion WHERE caso_id = @id ORDER BY id_solucion DESC;");
-
-      // 2) Verificar si el agente existe
-      let agenteOk = null;
-      if (agente_id) {
-        const agRs = await pool.request()
-          .input("ag", sql.Int, agente_id)
-          .query("SELECT COUNT(1) AS ok FROM dbo.usuario WHERE id_usuario = @ag;");
-        agenteOk = (agRs.recordset?.[0]?.ok > 0) ? agente_id : null;
-      }
-
+      // si no hay, la creo
       if (!solRs.recordset || solRs.recordset.length === 0) {
-        // No hay solución: la creo
         await pool.request()
           .input("id", sql.Int, id)
-          .input("resumen", sql.NVarChar(200), solucion.substring(0, 200))
+          .input("resumen", sql.NVarChar(200), solucion.substring(0,200))
           .input("pasos", sql.NVarChar(sql.MAX), solucion)
-          .input("resuelto_por", sql.Int, agenteOk)
+          .input("resuelto_por", sql.Int, agente_id || null)
           .query(`
             INSERT INTO dbo.solucion (caso_id, resumen, pasos, resuelto_por_id, fecha_resolucion)
             VALUES (@id, @resumen, @pasos, @resuelto_por, SYSUTCDATETIME());
           `);
-      } else if (agenteOk) {
-        // Ya hay solución: actualizo resuelto_por si falta
+      } else if (agente_id) {
         await pool.request()
           .input("id", sql.Int, id)
-          .input("ag", sql.Int, agenteOk)
+          .input("ag", sql.Int, agente_id)
           .query(`
             UPDATE s
             SET s.resuelto_por_id = @ag,
@@ -148,8 +158,6 @@ module.exports = async function (context, req) {
       }
     }
 
-    // ====== Respuesta ======
-    context.log("CREADO_id=", id, "DEPTO=", departamento, "AGENTE=", agente_id, "HAY_SOL=", (solucion.trim().length>0));
     context.res = {
       status: 200,
       headers: { "Content-Type": "application/json" },
