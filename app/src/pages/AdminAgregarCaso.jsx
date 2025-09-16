@@ -7,7 +7,7 @@ export default function AdminAgregarCaso() {
   const [form, setForm] = useState({
     caso: "",
     asunto: "",
-    nivel: "",            // ahora lo llenamos desde un <select>
+    nivel: "",            // select 1..3
     agente: "",           // id de usuario (string)
     inicio: "",
     cierre: "",
@@ -35,7 +35,7 @@ export default function AdminAgregarCaso() {
         console.error("Fallo usuarios-list:", e);
         if (!cancelled) {
           setUsuarios([]);
-          setError((prev) => prev || "No se pudo cargar la lista de agentes.");
+          setError(prev => prev || "No se pudo cargar la lista de agentes.");
         }
       } finally {
         if (!cancelled) setUsuariosLoading(false);
@@ -46,7 +46,7 @@ export default function AdminAgregarCaso() {
 
   function handleChange(e) {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setForm(prev => ({ ...prev, [name]: value }));
   }
 
   async function handleSubmit(e) {
@@ -70,9 +70,9 @@ export default function AdminAgregarCaso() {
         body: JSON.stringify({
           caso: form.caso,
           asunto: form.asunto,
-          nivel: form.nivel || null,          // lo recibe el backend y lo parsea a int
-          agente: form.agente || null,        // id del agente seleccionado (string)
-          inicio: form.inicio,
+          nivel: form.nivel || null,
+          agente: form.agente || null,   // id del agente (string)
+          inicio: form.inicio,           // seguimos usando texto dd/mm/aaaa para no cambiar backend
           cierre: form.cierre,
           descripcion: form.descripcion,
           solucion: form.solucion,
@@ -92,20 +92,57 @@ export default function AdminAgregarCaso() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-900 to-blue-900">
-      <div className="max-w-6xl mx-auto px-6 py-10">
-        <header className="flex items-center justify-between">
-          <h1 className="text-4xl font-extrabold text-white">AGREGAR CASOS</h1>
-          <button
-            onClick={() => nav(-1)}
-            className="px-4 py-2 rounded-full bg-red-500 text-white font-bold hover:bg-red-600"
-          >
-            Regresar
-          </button>
-        </header>
+    <main className="min-h-screen w-full relative overflow-hidden text-white">
+      {/* Fondo con imagen y “partículas” del componente original */}
+      <div
+        className="absolute inset-0 -z-20"
+        style={{
+          backgroundImage: "url('/fondo.jpg')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat"
+        }}
+      />
+      <div
+        className="absolute inset-0 -z-10 opacity-45"
+        style={{
+          backgroundImage: `
+            radial-gradient(2px 2px at 20% 30%, rgba(88,164,255,.6) 40%, transparent 41%),
+            radial-gradient(2px 2px at 40% 70%, rgba(88,164,255,.45) 40%, transparent 41%),
+            radial-gradient(2px 2px at 65% 50%, rgba(88,164,255,.5) 40%, transparent 41%),
+            radial-gradient(2px 2px at 80% 20%, rgba(88,164,255,.35) 40%, transparent 41%),
+            radial-gradient(2px 2px at 15% 85%, rgba(88,164,255,.35) 40%, transparent 41%)
+          `,
+          filter: "blur(.2px)",
+          animation: "float 12s linear infinite"
+        }}
+      />
+      <style>{`
+        @keyframes float {
+          0% { transform: translateY(0) }
+          50% { transform: translateY(-10px) }
+          100% { transform: translateY(0) }
+        }
+      `}</style>
 
-        <section className="mt-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Contenedor tipo “card” translúcido del original */}
+      <div className="min-h-screen grid place-items-center p-6">
+        <section className="w-full max-w-5xl rounded-2xl border border-white/20 p-10 md:p-14 shadow-[0_20px_60px_rgba(0,0,0,.45)] bg-white/10 backdrop-blur-md relative">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-8">
+            <h1 className="text-3xl md:text-4xl font-extrabold uppercase text-white">
+              Agregar Casos
+            </h1>
+            <button
+              onClick={() => nav(-1)}
+              className="absolute right-6 top-6 px-5 py-2 rounded-full bg-red-500/90 hover:bg-red-600 font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-white/50"
+            >
+              Regresar
+            </button>
+          </div>
+
+          {/* Formulario funcional nuevo, con el look del original */}
+          <form onSubmit={handleSubmit} className="flex flex-col gap-6">
             {error && (
               <div className="rounded-lg bg-red-600/20 border border-red-400 text-red-200 px-4 py-3">
                 {error}
@@ -124,7 +161,6 @@ export default function AdminAgregarCaso() {
                   className="w-full rounded-full px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
                 />
               </div>
-
               <div>
                 <label className="block font-semibold text-white">Nivel (1-3)</label>
                 <select
@@ -158,7 +194,7 @@ export default function AdminAgregarCaso() {
                   {!usuariosLoading && usuarios.length === 0 && (
                     <option value="" disabled>No hay agentes</option>
                   )}
-                  {usuarios.map((u) => (
+                  {usuarios.map(u => (
                     <option key={u.id_usuario} value={String(u.id_usuario)}>
                       {u.nombre}
                     </option>
@@ -184,7 +220,7 @@ export default function AdminAgregarCaso() {
               </div>
             </div>
 
-            {/* Fila 3: Inicio / Cierre */}
+            {/* Fila 3: Inicio / Cierre (dejamos texto dd/mm/aaaa para no romper formato del backend) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block font-semibold text-white">Inicio</label>
@@ -196,7 +232,6 @@ export default function AdminAgregarCaso() {
                   className="w-full rounded-full px-4 py-2 bg-gray-200 text-black placeholder-gray-600"
                 />
               </div>
-
               <div>
                 <label className="block font-semibold text-white">Cierre</label>
                 <input
@@ -230,11 +265,11 @@ export default function AdminAgregarCaso() {
                 value={form.descripcion}
                 onChange={handleChange}
                 rows={5}
-                className="w-full rounded-2xl px-4 py-3 bg-gray-200 text-black"
+                className="w-full rounded-lg px-4 py-3 bg-gray-200 text-black"
               />
             </div>
 
-            {/* Solución (opcional) */}
+            {/* Solución */}
             <div>
               <label className="block font-semibold text-white">Solución (opcional)</label>
               <textarea
@@ -242,10 +277,11 @@ export default function AdminAgregarCaso() {
                 value={form.solucion}
                 onChange={handleChange}
                 rows={4}
-                className="w-full rounded-2xl px-4 py-3 bg-gray-200 text-black"
+                className="w-full rounded-lg px-4 py-3 bg-gray-200 text-black"
               />
             </div>
 
+            {/* Botón enviar */}
             <button
               type="submit"
               disabled={busy}
