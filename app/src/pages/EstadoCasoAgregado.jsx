@@ -5,34 +5,36 @@ function useQS() {
   const { search, state } = useLocation();
   const qs = useMemo(() => new URLSearchParams(search), [search]);
 
-  // Compatibilidad: primero state, luego querystring
   const okQS = qs.get("ok");
   const ok =
     state?.ok ??
-    (okQS === "1" || okQS === "true" || okQS === "yes" ? true :
-     okQS === "0" || okQS === "false" ? false : undefined);
+    (okQS === "1" || okQS === "true" || okQS === "yes"
+      ? true
+      : okQS === "0" || okQS === "false"
+      ? false
+      : undefined);
 
-  const id  = state?.id  ?? qs.get("id")  ?? null;
-  const num = state?.num ?? qs.get("num") ?? null;
-  const reason = state?.reason ?? qs.get("reason") ?? null;
-
-  return { ok, id, num, reason };
+  return {
+    ok,
+    id:  state?.id  ?? qs.get("id")  ?? null,
+    num: state?.num ?? qs.get("num") ?? null,
+    reason: state?.reason ?? qs.get("reason") ?? null,
+  };
 }
 
 export default function EstadoCasoAgregado() {
   const { ok, id, num, reason } = useQS();
   const nav = useNavigate();
 
-  const isSuccess  = ok === true || (ok === undefined && !!id); // fallback si no viene ok
+  const isSuccess   = ok === true || (ok === undefined && !!id);
   const isDuplicate = ok === false && reason === "dup";
 
-  // Textos según estado
   const title = "Panel de Administrador";
   const mainMsg = isSuccess
     ? "Muchas gracias, su caso fue agregado exitosamente al sistema."
     : isDuplicate
-      ? "Este número de caso ya existe en el sistema."
-      : "No se pudo completar la operación.";
+    ? "Este número de caso ya existe en el sistema."
+    : "No se pudo completar la operación.";
 
   const icon = isSuccess ? "✅" : "❌";
 
@@ -68,21 +70,20 @@ export default function EstadoCasoAgregado() {
               {mainMsg}
             </p>
 
-            <div className={`text-7xl mt-6 ${isSuccess ? "" : "drop-shadow-lg"}`}>
-              {icon}
-            </div>
+            <div className="text-7xl mt-6">{icon}</div>
 
-            {/* Datos del caso */}
+            {/* Mostrar primero el número de caso. Solo mostrar ID si no hay número. */}
             <div className="mt-5 space-y-1 text-white/90">
-              {num && (
+              {num ? (
                 <p>
                   Número de caso: <b>{num}</b>
                 </p>
-              )}
-              {isSuccess && id && (
-                <p>
-                  ID interno: <b>{id}</b>
-                </p>
+              ) : (
+                id && (
+                  <p>
+                    ID interno: <b>{id}</b>
+                  </p>
+                )
               )}
             </div>
           </div>
