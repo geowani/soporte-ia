@@ -13,9 +13,26 @@ function toISODateFromDMY(s) {
   return iso; // yyyy-MM-dd
 }
 
+// Lee el userId desde header x-user-id o body.creadoPorId
+function readCreatorFromReq(req) {
+  const headerId = req?.headers?.["x-user-id"];
+  const bodyId = req?.body?.creadoPorId;
+  const userId = Number(headerId ?? bodyId ?? NaN);
+  if (!Number.isFinite(userId) || userId <= 0) return null;
+  const email = req?.headers?.["x-user-email"] || null;
+  return { id: userId, email };
+}
+
 module.exports = async function (context, req) {
   try {
     const body = (req.body || {});
+
+    // ====== Auditoría: usuario que crea el caso ======
+    const creator = readCreatorFromReq(req);
+    if (!creator) {
+      context.res = { status: 401, body: { error: "Falta x-user-id/creadoPorId para auditoría." } };
+      return;
+    }
 
     // ====== Campos del formulario ======
     const numero_caso = (body.caso ?? "").toString().trim();                  // opcional
@@ -217,6 +234,31 @@ module.exports = async function (context, req) {
           `);
       }
     }
+
+    // C) **Auditar creador del caso** con tolerancia a columnas
+    //    - Si tu esquema tiene 'creado_por_id', lo actualiza.
+    //    - Si usa 'usuario_creacion_id', también lo actualiza.
+    //    - Solo se ejecuta si la columna existe.
+    await pool.request()
+      .input("id",  sql.Int, id)
+      .input("uid", sql.Int, Number(creator.id))
+      .query(`
+        IF COL_LENGTH('dbo.caso','creado_por_id') IS NOT NULL
+        BEGIN
+          UPDATE dbo.caso
+          SET creado_por_id = @uid
+          WHERE id_caso = @id
+            AND (creado_por_id IS NULL OR creado_por_id <> @uid);
+        END;
+
+        IF COL_LENGTH('dbo.caso','usuario_creacion_id') IS NOT NULL
+        BEGIN
+          UPDATE dbo.caso
+          SET usuario_creacion_id = @uid
+          WHERE id_caso = @id
+            AND (usuario_creacion_id IS NULL OR usuario_creacion_id <> @uid);
+        END;
+      `);
 
     // ====== Obtener y devolver también el numero_caso ======
     let numero_caso_db = null;
