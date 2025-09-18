@@ -101,12 +101,12 @@ module.exports = async function (context, req) {
           ;WITH cte AS (
             SELECT id_usuario, 1 AS score
             FROM dbo.usuario
-            WHERE nombre = @q OR nombre_completo = @q
+            WHERE nombre_completo = @q
             UNION ALL
             SELECT TOP 1 id_usuario, 0 AS score
             FROM dbo.usuario
-            WHERE nombre LIKE @like OR nombre_completo LIKE @like
-            ORDER BY nombre
+            WHERE nombre_completo LIKE @like
+            ORDER BY nombre_completo
           )
           SELECT TOP 1 id_usuario FROM cte ORDER BY score DESC, id_usuario;
         `);
@@ -235,30 +235,29 @@ module.exports = async function (context, req) {
       }
     }
 
-    // C) **Auditar creador del caso** con tolerancia a columnas
-    //    - Si tu esquema tiene 'creado_por_id', lo actualiza.
-    //    - Si usa 'usuario_creacion_id', también lo actualiza.
-    //    - Solo se ejecuta si la columna existe.
-    await pool.request()
-      .input("id",  sql.Int, id)
-      .input("uid", sql.Int, Number(creator.id))
+    // C) **Auditar creador del caso** (solo creado_por_id si existe)
+    //    Evitamos "Invalid column name" verificando con sys.columns.
+    const chk = await pool.request()
+      .input("tbl", sql.NVarChar(128), "dbo.caso")
+      .input("col", sql.NVarChar(128), "creado_por_id")
       .query(`
-        IF COL_LENGTH('dbo.caso','creado_por_id') IS NOT NULL
-        BEGIN
+        SELECT 1 AS exists_col
+        FROM sys.columns 
+        WHERE object_id = OBJECT_ID(@tbl) AND name = @col;
+      `);
+
+    const hasCreadoPor = chk.recordset?.length > 0;
+    if (hasCreadoPor) {
+      await pool.request()
+        .input("id",  sql.Int, id)
+        .input("uid", sql.Int, Number(creator.id))
+        .query(`
           UPDATE dbo.caso
           SET creado_por_id = @uid
           WHERE id_caso = @id
             AND (creado_por_id IS NULL OR creado_por_id <> @uid);
-        END;
-
-        IF COL_LENGTH('dbo.caso','usuario_creacion_id') IS NOT NULL
-        BEGIN
-          UPDATE dbo.caso
-          SET usuario_creacion_id = @uid
-          WHERE id_caso = @id
-            AND (usuario_creacion_id IS NULL OR usuario_creacion_id <> @uid);
-        END;
-      `);
+        `);
+    }
 
     // ====== Obtener y devolver también el numero_caso ======
     let numero_caso_db = null;
@@ -268,7 +267,7 @@ module.exports = async function (context, req) {
         .query("SELECT numero_caso FROM dbo.caso WHERE id_caso = @id;");
       numero_caso_db = rsNum.recordset?.[0]?.numero_caso ?? null;
     } catch {
-      // no-op: si falla la lectura, mandamos el ingresado
+      // no-op
     }
     const numero_caso_out = numero_caso_db || numero_caso || null;
 
