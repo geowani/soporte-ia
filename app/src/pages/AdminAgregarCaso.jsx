@@ -40,6 +40,25 @@ export default function AdminAgregarCaso() {
     return d.length === 8 ? `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}` : null;
   };
 
+  // Lee usuario actual del storage (ajusta claves si es necesario)
+  function getCurrentUser() {
+    try {
+      const keys = ["authUser", "user", "sessionUser"];
+      for (const k of keys) {
+        const raw = localStorage.getItem(k);
+        if (raw) {
+          const u = JSON.parse(raw);
+          return {
+            id: u.id_usuario ?? u.userId ?? u.id ?? null,
+            email: u.email ?? u.correo ?? null,
+            nombre: u.nombre ?? u.displayName ?? null,
+          };
+        }
+      }
+    } catch {}
+    return null;
+  }
+
   // ---------- data ----------
   useEffect(() => {
     let cancelled = false;
@@ -90,6 +109,13 @@ export default function AdminAgregarCaso() {
     e.preventDefault();
     setError("");
 
+    // Usuario actual (para auditoría)
+    const currentUser = getCurrentUser();
+    if (!currentUser?.id) {
+      setError("No se detectó el usuario logueado. Vuelve a iniciar sesión.");
+      return;
+    }
+
     if (form.caso && !/^\d+$/.test(form.caso)) {
       setError("El número de caso solo puede contener dígitos.");
       return;
@@ -119,21 +145,31 @@ export default function AdminAgregarCaso() {
     try {
       const res = await fetch("/api/casos/create", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          // Enviamos también por header para middleware/back
+          "x-user-id": String(currentUser.id),
+          ...(currentUser.email ? { "x-user-email": currentUser.email } : {}),
+        },
         body: JSON.stringify({
           caso: form.caso || null,
           asunto: form.asunto,
           nivel: form.nivel || null,
-          agente: form.agente || null,
-          inicio: inicioFmt,     // dd/MM/aaaa o null
-          cierre: cierreFmt,     // dd/MM/aaaa o null
+          agente: form.agente || null,      // agente asignado (select)
+          inicio: inicioFmt,                 // dd/MM/aaaa o null
+          cierre: cierreFmt,                 // dd/MM/aaaa o null
           descripcion: form.descripcion,
           solucion: form.solucion,
-          departamento: (form.departamento || "").toUpperCase()
+          departamento: (form.departamento || "").toUpperCase(),
+
+          // NUEVO: quién creó el caso (id de la persona que inició sesión)
+          creadoPorId: Number(currentUser.id),
         })
       });
 
-      const data = await res.json();
+      // Si la respuesta no es JSON válido, intenta leer texto para debug
+      let data = null;
+      try { data = await res.json(); } catch { data = {}; }
 
       // Duplicado: 409 del backend
       if (res.status === 409 || data?.error === "DUPLICATE_CASE") {
@@ -145,18 +181,20 @@ export default function AdminAgregarCaso() {
         return;
       }
 
-      // Éxito
-      if (res.ok && data?.ok && data?.id_caso) {
+      // Éxito (ajusta claves si tu backend retorna otras)
+      if (res.ok && (data?.ok || data?.id_caso)) {
         const numOut = data?.numero_caso || form.caso || "";
+        const newId = data?.id_caso ?? data?.id ?? "";
         nav(
-          `${SUCCESS_URL}?ok=1&id=${encodeURIComponent(data.id_caso)}&num=${encodeURIComponent(numOut)}`,
+          `${SUCCESS_URL}?ok=1&id=${encodeURIComponent(newId)}&num=${encodeURIComponent(numOut)}`,
           { replace: true }
         );
         return;
       }
 
       // Otros errores con mensaje del backend
-      throw new Error(data?.detail || data?.error || "No se pudo crear el caso");
+      const detail = data?.detail || data?.error || `HTTP ${res.status}`;
+      throw new Error(detail || "No se pudo crear el caso");
     } catch (err) {
       setError(err.message || "Error al enviar el formulario");
     } finally {
