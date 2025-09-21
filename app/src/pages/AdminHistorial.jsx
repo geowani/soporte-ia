@@ -1,5 +1,5 @@
 // app/src/pages/AdminHistorial.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 export default function AdminHistorial() {
@@ -20,10 +20,16 @@ export default function AdminHistorial() {
 
   // fetch (solo cuando el usuario hace clic en Buscar)
   async function loadCases() {
+    // Permitir buscar si hay TEXTO o si hay AMBAS fechas
+    if (!q && (!from || !to)) {
+      setHasSearched(false);
+      setErr("Escribe texto o completa ambas fechas para buscar.");
+      return;
+    }
     try {
       setLoading(true);
       setErr("");
-      const lim = Math.min(Math.max(parseInt(limit || "1", 10), 1), 500); // 1..500
+      const lim = Math.min(Math.max(parseInt(limit || "1", 10), 1), 500); // rango 1..500
       const resp = await fetch(`/api/casos/ultimos?limit=${lim}`, { credentials: "include" });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const json = await resp.json();
@@ -43,7 +49,11 @@ export default function AdminHistorial() {
       const t = (r?.titulo_pref || "").toLowerCase();
       const n = String(r?.numero_caso || "").toLowerCase();
       const who = (r?.creado_por || "").toLowerCase();
-      const okText = !q || t.includes(q.toLowerCase()) || n.includes(q.toLowerCase()) || who.includes(q.toLowerCase());
+      const okText =
+        !q ||
+        t.includes(q.toLowerCase()) ||
+        n.includes(q.toLowerCase()) ||
+        who.includes(q.toLowerCase());
 
       const d = r?.fecha_creacion ? new Date(r.fecha_creacion) : null;
       const okFrom = !from || (d && d >= new Date(from + "T00:00:00"));
@@ -104,6 +114,7 @@ export default function AdminHistorial() {
                 placeholder="Buscar (caso, título o usuario)"
                 value={q}
                 onChange={e => setQ(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") loadCases(); }} // atajo Enter
               />
               <input
                 type="date"
@@ -131,13 +142,17 @@ export default function AdminHistorial() {
                 <button
                   onClick={loadCases}
                   className="rounded-lg px-3 py-2 bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={!from || !to || loading}
-                  title={!from || !to ? "Completa las fechas para buscar" : "Buscar"}
+                  // Permite buscar si hay texto o si hay ambas fechas
+                  disabled={loading || (!q && (!from || !to))}
+                  title={!q && (!from || !to) ? "Escribe texto o completa ambas fechas" : "Buscar"}
                 >
                   {loading ? "Buscando…" : "Buscar"}
                 </button>
                 <button
-                  onClick={() => { setQ(""); setFrom(""); setTo(""); setRows([]); setHasSearched(false); }}
+                  onClick={() => {
+                    setQ(""); setFrom(""); setTo(""); setRows([]);
+                    setHasSearched(false); setErr("");
+                  }}
                   className="rounded-lg px-3 py-2 bg-gray-800 text-white"
                 >
                   Limpiar filtros
@@ -156,7 +171,7 @@ export default function AdminHistorial() {
             {err && <div className="py-6 text-red-600">{err}</div>}
             {!hasSearched && !loading && !err && (
               <div className="py-6 text-gray-600">
-                Ingresa <b>fecha desde</b> y <b>fecha hasta</b>, define <b>Resultados</b> y presiona <b>Buscar</b>.
+                Ingresa <b>texto</b> o <b>fecha desde</b> y <b>fecha hasta</b>, define <b>Resultados</b> y presiona <b>Buscar</b>.
               </div>
             )}
 
