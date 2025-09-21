@@ -18,6 +18,26 @@ export default function AdminHistorial() {
   // control de búsqueda
   const [hasSearched, setHasSearched] = useState(false);
 
+  // --- helper: fecha efectiva para filtrar (fecha en que se agregó al sistema) ---
+  function getAddedDate(r) {
+    // Prioridad: creado_en -> (fallback) fecha_creacion
+    const raw =
+      r?.creado_en ??
+      r?.creadoEn ??
+      r?.created_at ??
+      r?.createdAt ??
+      r?.fecha_creacion ??
+      null;
+
+    if (!raw) return null;
+
+    // Normaliza "YYYY-MM-DD HH:mm:ss.sss" a ISO "YYYY-MM-DDTHH:mm:ss.sss"
+    const asStr = String(raw);
+    const normalized = asStr.includes("T") ? asStr : asStr.replace(" ", "T");
+    const d = new Date(normalized);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
   // fetch (solo cuando el usuario hace clic en Buscar)
   async function loadCases() {
     // Permitir buscar si hay TEXTO o si hay AMBAS fechas
@@ -33,7 +53,17 @@ export default function AdminHistorial() {
       const resp = await fetch(`/api/casos/ultimos?limit=${lim}`, { credentials: "include" });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const json = await resp.json();
-      setRows(Array.isArray(json.items) ? json.items : []);
+
+      const items = Array.isArray(json.items) ? json.items : [];
+
+      // Ordena por fecha de agregado (desc), con fallback a fecha_creacion
+      items.sort((a, b) => {
+        const da = getAddedDate(a)?.getTime() ?? 0;
+        const db = getAddedDate(b)?.getTime() ?? 0;
+        return db - da;
+      });
+
+      setRows(items);
     } catch (e) {
       console.error("AdminHistorial fetch error:", e);
       setErr("No se pudieron cargar los últimos casos.");
@@ -43,7 +73,7 @@ export default function AdminHistorial() {
     }
   }
 
-  // Filtrado en memoria
+  // Filtrado en memoria (por texto + rango de FECHA DE AGREGADO)
   const filtered = useMemo(() => {
     return (rows || []).filter(r => {
       const t = (r?.titulo_pref || "").toLowerCase();
@@ -55,7 +85,7 @@ export default function AdminHistorial() {
         n.includes(q.toLowerCase()) ||
         who.includes(q.toLowerCase());
 
-      const d = r?.fecha_creacion ? new Date(r.fecha_creacion) : null;
+      const d = getAddedDate(r);
       const okFrom = !from || (d && d >= new Date(from + "T00:00:00"));
       const okTo   = !to   || (d && d <= new Date(to   + "T23:59:59"));
       return okText && okFrom && okTo;
@@ -171,7 +201,8 @@ export default function AdminHistorial() {
             {err && <div className="py-6 text-red-600">{err}</div>}
             {!hasSearched && !loading && !err && (
               <div className="py-6 text-gray-600">
-                Ingresa <b>texto</b> o <b>fecha desde</b> y <b>fecha hasta</b>, define <b>Resultados</b> y presiona <b>Buscar</b>.
+                Ingresa <b>texto</b> o <b>fecha desde</b> y <b>fecha hasta</b> (día en que se
+                <b> agregaron</b>), define <b>Resultados</b> y presiona <b>Buscar</b>.
               </div>
             )}
 
