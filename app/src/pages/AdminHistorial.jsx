@@ -5,17 +5,14 @@ import { useNavigate } from "react-router-dom";
 export default function AdminHistorial() {
   const nav = useNavigate();
 
-  // estados base
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  // filtros
   const [q, setQ] = useState("");
-  const [from, setFrom] = useState(""); // yyyy-mm-dd
-  const [to, setTo] = useState("");     // yyyy-mm-dd
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
 
-  // carga inicial
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -38,7 +35,6 @@ export default function AdminHistorial() {
     return () => { alive = false; };
   }, []);
 
-  // filtrado en memoria (texto + rango de fechas)
   const filtered = useMemo(() => {
     return (rows || []).filter(r => {
       const t = (r?.titulo_pref || "").toLowerCase();
@@ -55,7 +51,7 @@ export default function AdminHistorial() {
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
-      {/* Fondo (igual que tu versión anterior) */}
+      {/* 👇 Fondo igual al diseño original */}
       <div
         className="absolute inset-0 -z-20"
         style={{
@@ -96,38 +92,38 @@ export default function AdminHistorial() {
             </button>
           </div>
 
-          {/* Card tabla con filtros – mantiene tu look & feel */}
-          <div className="rounded-xl bg-gray-200/95 text-black p-6 md:p-8">
-            {/* Barra de filtros con el mismo estilo suave */}
+          {/* Card tabla con filtros */}
+          <div className="rounded-xl bg-gray-200 text-black p-6 md:p-8">
+            {/* Barra de filtros */}
             <div className="grid gap-3 md:grid-cols-[1.2fr_.6fr_.6fr_auto] mb-5">
               <input
-                className="rounded-xl px-4 py-2 border border-gray-300/80 bg-white/70 placeholder-gray-500/80 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                className="rounded-lg px-3 py-2 border border-gray-300"
                 placeholder="Buscar (caso, título o usuario)"
                 value={q}
                 onChange={e => setQ(e.target.value)}
               />
               <input
                 type="date"
-                className="rounded-xl px-4 py-2 border border-gray-300/80 bg-white/70 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                className="rounded-lg px-3 py-2 border border-gray-300"
                 value={from}
                 onChange={e => setFrom(e.target.value)}
               />
               <input
                 type="date"
-                className="rounded-xl px-4 py-2 border border-gray-300/80 bg-white/70 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                className="rounded-lg px-3 py-2 border border-gray-300"
                 value={to}
                 onChange={e => setTo(e.target.value)}
               />
               <button
                 onClick={() => { setQ(""); setFrom(""); setTo(""); }}
-                className="rounded-xl px-4 py-2 bg-gray-900 text-white font-medium hover:bg-black transition"
+                className="rounded-lg px-3 py-2 bg-gray-800 text-white"
               >
                 Limpiar filtros
               </button>
             </div>
 
             {/* Header tabla */}
-            <div className="grid grid-cols-[1fr_2fr_1fr] items-center px-2 md:px-4 pb-3 font-bold text-gray-700 border-b border-black/10">
+            <div className="grid grid-cols-[1fr_2fr_1fr] font-semibold text-gray-700 border-b border-gray-300 pb-4 mb-4">
               <span>Casos</span>
               <span>Título</span>
               <span>Agregado por</span>
@@ -137,16 +133,16 @@ export default function AdminHistorial() {
             {loading && <div className="py-6 text-gray-600">Cargando…</div>}
             {!loading && err && <div className="py-6 text-red-600">{err}</div>}
 
-            {/* Filas */}
+            {/* Lista */}
             {!loading && !err && (
               <>
-                <ul className="divide-y divide-black/10">
+                <ul className="divide-y divide-gray-300">
                   {filtered.map((r, i) => (
                     <li
                       key={`${r.numero_caso}-${i}`}
                       className="grid grid-cols-[1fr_2fr_1fr] items-center py-4 px-2 md:px-4"
                     >
-                      <span className="font-normal">{r.numero_caso}</span>
+                      <span>{r.numero_caso}</span>
                       <span>{r.titulo_pref}</span>
                       <span>{r.creado_por || "(sin asignar)"}</span>
                     </li>
