@@ -1,32 +1,40 @@
 // app/src/pages/AdminHistorial.jsx
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 export default function AdminHistorial() {
   const nav = useNavigate();
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
 
-  const data = useMemo(
-    () => [
-      { id: "0984510", titulo: "SYS || Puerto bloqueado", agregado: "Admin 1" },
-      { id: "1089210", titulo: "PC || Instalacion de Chromium", agregado: "Admin 2" },
-      { id: "0841231", titulo: "HW || Impresora toner bajo", agregado: "Admin 1" },
-      { id: "098999",  titulo: "PC || Drive no abre", agregado: "Admin 2" },
-      { id: "1058730", titulo: "HW || Error A42.21.10", agregado: "Admin 1" },
-    ],
-    []
-  );
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        setLoading(true);
+        setErr("");
+        const resp = await fetch(`/api/casos/ultimos?limit=5`, { credentials: "include" });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const json = await resp.json();
+        if (!alive) return;
+        setRows(Array.isArray(json.items) ? json.items : []);
+      } catch (e) {
+        if (!alive) return;
+        setErr("No se pudieron cargar los últimos casos.");
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
       {/* Fondo */}
       <div
         className="absolute inset-0 -z-20"
-        style={{
-          backgroundImage: "url('/fondo.jpg')",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          backgroundRepeat: "no-repeat",
-        }}
+        style={{ backgroundImage: "url('/fondo.jpg')", backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" }}
       />
       <div
         className="absolute inset-0 -z-10 opacity-45"
@@ -53,28 +61,34 @@ export default function AdminHistorial() {
             </h1>
             <button
               onClick={() => nav("/admin")}
-              className="px-5 py-2 rounded-full bg-red-500/90 hover:bg-red-600 text-white font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-white/50"
+              className="px-5 py-2 rounded-full bg-red-500/90 hover:bg-red-500 transition focus:outline-none focus:ring-2 focus:ring-white/50"
             >
               Regresar
             </button>
           </div>
 
-          {/* Tabla */}
           <div className="rounded-xl bg-gray-200 text-black p-6 md:p-8">
-            <div className="grid grid-cols-[1fr_2fr_1fr] items-center px-2 md:px-4 pb-3 font-bold">
+            {/* Header tabla */}
+            <div className="grid grid-cols-[1fr_2fr_1fr] font-semibold text-gray-700 border-b border-gray-300 pb-4 mb-4">
               <span>Casos</span>
               <span>Título</span>
               <span>Agregado por</span>
             </div>
-            <ul className="divide-y divide-black/40">
-              {data.map((c, i) => (
-                <li
-                  key={i}
-                  className="grid grid-cols-[1fr_2fr_1fr] items-center py-4 px-2 md:px-4"
-                >
-                  <span className="font-normal">{c.id}</span> {/* 👈 ahora normal */}
-                  <span>{c.titulo}</span>
-                  <span>{c.agregado}</span>
+
+            {/* Estados */}
+            {loading && <div className="py-6 text-gray-600">Cargando…</div>}
+            {!loading && err && <div className="py-6 text-red-600">{err}</div>}
+            {!loading && !err && rows.length === 0 && (
+              <div className="py-6 text-gray-600">Sin datos para mostrar.</div>
+            )}
+
+            {/* Filas */}
+            <ul className="divide-y divide-gray-300">
+              {rows.map((r, idx) => (
+                <li key={`${r.numero_caso}-${idx}`} className="grid grid-cols-[1fr_2fr_1fr] items-center py-4 px-2 md:px-4">
+                  <span className="font-normal">{r.numero_caso}</span>
+                  <span>{r.titulo_pref}</span>
+                  <span>{r.creado_por || "(sin asignar)"}</span>
                 </li>
               ))}
             </ul>
