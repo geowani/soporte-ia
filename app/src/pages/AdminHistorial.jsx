@@ -6,35 +6,38 @@ export default function AdminHistorial() {
   const nav = useNavigate();
 
   const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
+  // filtros UI
   const [q, setQ] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [from, setFrom] = useState(""); // yyyy-mm-dd
+  const [to, setTo] = useState("");     // yyyy-mm-dd
+  const [limit, setLimit] = useState(50);
 
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        setLoading(true);
-        setErr("");
-        const resp = await fetch(`/api/casos/ultimos?limit=50`, { credentials: "include" });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const json = await resp.json();
-        if (!alive) return;
-        setRows(Array.isArray(json.items) ? json.items : []);
-      } catch (e) {
-        if (!alive) return;
-        console.error("AdminHistorial fetch error:", e);
-        setErr("No se pudieron cargar los últimos casos.");
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-    return () => { alive = false; };
-  }, []);
+  // control de búsqueda
+  const [hasSearched, setHasSearched] = useState(false);
 
+  // fetch (solo cuando el usuario hace clic en Buscar)
+  async function loadCases() {
+    try {
+      setLoading(true);
+      setErr("");
+      const lim = Math.min(Math.max(parseInt(limit || "1", 10), 1), 500); // 1..500
+      const resp = await fetch(`/api/casos/ultimos?limit=${lim}`, { credentials: "include" });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      setRows(Array.isArray(json.items) ? json.items : []);
+    } catch (e) {
+      console.error("AdminHistorial fetch error:", e);
+      setErr("No se pudieron cargar los últimos casos.");
+    } finally {
+      setLoading(false);
+      setHasSearched(true);
+    }
+  }
+
+  // Filtrado en memoria
   const filtered = useMemo(() => {
     return (rows || []).filter(r => {
       const t = (r?.titulo_pref || "").toLowerCase();
@@ -51,7 +54,7 @@ export default function AdminHistorial() {
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
-      {/* 👇 Fondo igual al diseño original */}
+      {/* Fondo como tu diseño original */}
       <div
         className="absolute inset-0 -z-20"
         style={{
@@ -92,10 +95,10 @@ export default function AdminHistorial() {
             </button>
           </div>
 
-          {/* Card tabla con filtros */}
+          {/* Card */}
           <div className="rounded-xl bg-gray-200 text-black p-6 md:p-8">
-            {/* Barra de filtros */}
-            <div className="grid gap-3 md:grid-cols-[1.2fr_.6fr_.6fr_auto] mb-5">
+            {/* Controles */}
+            <div className="grid gap-3 md:grid-cols-[1.2fr_.6fr_.6fr_.4fr_auto] mb-5">
               <input
                 className="rounded-lg px-3 py-2 border border-gray-300"
                 placeholder="Buscar (caso, título o usuario)"
@@ -114,12 +117,32 @@ export default function AdminHistorial() {
                 value={to}
                 onChange={e => setTo(e.target.value)}
               />
-              <button
-                onClick={() => { setQ(""); setFrom(""); setTo(""); }}
-                className="rounded-lg px-3 py-2 bg-gray-800 text-white"
-              >
-                Limpiar filtros
-              </button>
+              <input
+                type="number"
+                min={1}
+                max={500}
+                className="rounded-lg px-3 py-2 border border-gray-300"
+                value={limit}
+                onChange={e => setLimit(e.target.value)}
+                placeholder="Resultados"
+                title="Resultados máximos a mostrar"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={loadCases}
+                  className="rounded-lg px-3 py-2 bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!from || !to || loading}
+                  title={!from || !to ? "Completa las fechas para buscar" : "Buscar"}
+                >
+                  {loading ? "Buscando…" : "Buscar"}
+                </button>
+                <button
+                  onClick={() => { setQ(""); setFrom(""); setTo(""); setRows([]); setHasSearched(false); }}
+                  className="rounded-lg px-3 py-2 bg-gray-800 text-white"
+                >
+                  Limpiar filtros
+                </button>
+              </div>
             </div>
 
             {/* Header tabla */}
@@ -130,11 +153,15 @@ export default function AdminHistorial() {
             </div>
 
             {/* Estados */}
-            {loading && <div className="py-6 text-gray-600">Cargando…</div>}
-            {!loading && err && <div className="py-6 text-red-600">{err}</div>}
+            {err && <div className="py-6 text-red-600">{err}</div>}
+            {!hasSearched && !loading && !err && (
+              <div className="py-6 text-gray-600">
+                Ingresa <b>fecha desde</b> y <b>fecha hasta</b>, define <b>Resultados</b> y presiona <b>Buscar</b>.
+              </div>
+            )}
 
             {/* Lista */}
-            {!loading && !err && (
+            {hasSearched && !loading && !err && (
               <>
                 <ul className="divide-y divide-gray-300">
                   {filtered.map((r, i) => (
