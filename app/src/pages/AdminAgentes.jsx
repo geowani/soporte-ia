@@ -1,20 +1,36 @@
 // app/src/pages/AdminAgentes.jsx
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 export default function AdminAgentes() {
   const nav = useNavigate();
 
-  const data = useMemo(
-    () => [
-      { nombre: "Lester Estrada", busquedas: 10 },
-      { nombre: "Abner Zepeda",   busquedas: 15 },
-      { nombre: "Jorge Nufio",    busquedas: 5 },
-      { nombre: "María Romero",   busquedas: 8 },
-      { nombre: "Luis Pacheco",   busquedas: 6 },
-    ],
-    []
-  );
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState(null);
+  const [dias, setDias] = useState(30); // puedes cambiar el default
+
+  async function loadData(diasParam = dias) {
+    try {
+      setLoading(true);
+      setErr(null);
+      const url = diasParam ? `/api/agentes-busquedas?dias=${diasParam}` : "/api/agentes-busquedas";
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setItems(Array.isArray(data.items) ? data.items : []);
+    } catch (e) {
+      setErr(e.message || "Error cargando datos");
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // carga inicial
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden">
@@ -51,31 +67,72 @@ export default function AdminAgentes() {
             <h1 className="text-3xl md:text-4xl font-extrabold uppercase text-white">
               Agentes con más búsquedas
             </h1>
-            <button
-              onClick={() => nav("/admin")}
-              className="absolute right-6 top-6 px-5 py-2 rounded-full bg-red-500/90 hover:bg-red-600 text-white font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-white/50"
-            >
-              Regresar
-            </button>
+
+            <div className="flex items-center gap-3">
+              <select
+                value={dias}
+                onChange={(e) => setDias(Number(e.target.value))}
+                onBlur={(e) => loadData(Number(e.target.value))}
+                className="px-3 py-2 rounded-lg bg-white/90 text-gray-800"
+                title="Rango de tiempo"
+              >
+                <option value={7}>7 días</option>
+                <option value={30}>30 días</option>
+                <option value={90}>90 días</option>
+                <option value="">Histórico</option>
+              </select>
+
+              <button
+                onClick={() => loadData()}
+                className="px-4 py-2 rounded-lg bg-blue-500/90 hover:bg-blue-600 text-white font-semibold shadow-md transition"
+                title="Refrescar"
+              >
+                Refrescar
+              </button>
+
+              <button
+                onClick={() => nav("/admin")}
+                className="px-5 py-2 rounded-full bg-red-500/90 hover:bg-red-600 text-white font-semibold shadow-md transition"
+              >
+                Regresar
+              </button>
+            </div>
           </div>
 
           {/* Tabla */}
           <div className="rounded-xl bg-gray-100 p-6 md:p-8 text-black">
-            <div className="grid grid-cols-[1fr_auto] items-center px-2 md:px-4 pb-3 font-bold text-gray-800">
-              <span>Agente:</span>
-              <span>Buscas realizadas:</span>
-            </div>
-            <ul className="divide-y divide-gray-400">
-              {data.map((a, i) => (
-                <li
-                  key={i}
-                  className="grid grid-cols-[1fr_auto] items-center py-5 px-2 md:px-4"
-                >
-                  <span className="text-lg md:text-xl font-normal">{a.nombre}</span>
-                  <span className="text-lg md:text-xl font-normal">{a.busquedas}</span>
-                </li>
-              ))}
-            </ul>
+            {loading && <div className="py-6 text-center text-gray-600">Cargando…</div>}
+            {err && !loading && (
+              <div className="py-6 text-center text-red-600">Error: {err}</div>
+            )}
+            {!loading && !err && (
+              <>
+                <div className="grid grid-cols-[1fr_auto] items-center px-2 md:px-4 pb-3 font-bold text-gray-800">
+                  <span>Agente:</span>
+                  <span>Búsquedas realizadas:</span>
+                </div>
+                <ul className="divide-y divide-gray-400">
+                  {items.length === 0 && (
+                    <li className="py-6 px-2 md:px-4 text-gray-600">
+                      Sin datos en el período seleccionado.
+                    </li>
+                  )}
+                  {items.map((a) => (
+                    <li
+                      key={a.agente_id ?? a.agente_nombre}
+                      className="grid grid-cols-[1fr_auto] items-center py-5 px-2 md:px-4"
+                    >
+                      <span className="text-lg md:text-xl font-normal">
+                        {a.agente_nombre}
+                      </span>
+                      <span className="text-lg md:text-xl font-normal">
+                        {a.busquedas_realizadas}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </div>
         </section>
       </div>
