@@ -1,3 +1,4 @@
+// app/src/pages/Dashboard.jsx
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -5,44 +6,50 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
   const [q, setQ] = useState("");
   const navigate = useNavigate();
 
-  // --- Lee el userId guardado al iniciar sesión (igual que en AdminHistorial)
+  // Lee el userId guardado al iniciar sesión
   function getUserId() {
-    const id = Number(localStorage.getItem("userId"));
+    const raw = localStorage.getItem("userId");
+    const id = Number(raw);
     return Number.isFinite(id) ? id : null;
   }
 
-  // --- Registra el evento de búsqueda en el backend (Azure Functions)
+  // Registra el evento de búsqueda en el backend
   async function registrarBusqueda(term, { casoId = null, score = null } = {}) {
-    try {
-      const userId = getUserId();
-      // si no hay término, no registres
-      const q = String(term ?? "").trim();
-      if (!q) return;
+    const userId = getUserId();
+    const texto = String(term ?? "").trim();
+    if (!texto) return;
 
-      // fire-and-forget: no esperamos la respuesta para no frenar la UX
-      fetch("/api/busqueda-evento-registrar", {
+    try {
+      // útil para verificar que viaja el ID
+      console.log("[registrarBusqueda] userId:", userId, "q:", texto);
+
+      const res = await fetch("/api/busqueda-evento-registrar", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(userId ? { "x-user-id": String(userId) } : {}),
+          ...(userId ? { "x-user-id": String(userId) } : {})
         },
-        body: JSON.stringify({ q, casoId, score }),
-      }).catch(() => {});
-    } catch {
-      // silencioso: no romper la búsqueda si falla el registro
+        // también lo mando en el body como respaldo
+        body: JSON.stringify({ q: texto, casoId, score, usuarioId: userId })
+      });
+
+      const json = await res.json().catch(() => ({}));
+      console.log("[registrarBusqueda] response:", res.status, json);
+    } catch (e) {
+      console.warn("[registrarBusqueda] error:", e);
     }
   }
 
-  // --- Ejecuta la búsqueda: registra y navega
-  const search = useCallback(() => {
+  // Ejecuta la búsqueda: registra y luego navega
+  const search = useCallback(async () => {
     const term = q.trim();
     if (!term) {
       alert("Por favor ingresa un término para buscar");
       return;
     }
 
-    // 1) registra (no bloqueante)
-    registrarBusqueda(term);
+    // 1) registra y espera (evita cancelación por unmount)
+    await registrarBusqueda(term);
 
     // 2) navega a resultados
     navigate(`/resultados?q=${encodeURIComponent(term)}`);
@@ -138,7 +145,7 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
             </div>
           </div>
 
-          {/* Botón Sugerencias separado */}
+          {/* Botón Sugerencias */}
           <div className="mt-12">
             <button
               onClick={() => navigate("/sugerencias")}
