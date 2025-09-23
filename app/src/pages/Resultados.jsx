@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+// app/src/pages/Resultados.jsx
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { buscarCasos } from "../api";
 
@@ -15,6 +16,40 @@ export default function Resultados() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // helper para userId válido
+  function getUserId() {
+    const raw = localStorage.getItem("userId");
+    const id = Number(raw);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  }
+
+  // registra búsqueda en backend
+  async function registrarBusqueda(term, { casoId = null, score = null } = {}) {
+    const userId = getUserId();             // null si no hay id válido
+    const texto = String(term ?? "").trim();
+    if (!texto) return;
+
+    try {
+      const headers = { "Content-Type": "application/json" };
+      if (userId != null) headers["x-user-id"] = String(userId);
+
+      const body = { q: texto };
+      if (userId != null) body.usuarioId = userId;
+      if (casoId != null) body.casoId = casoId;
+      if (score != null) body.score = score;
+
+      const res = await fetch("/api/busqueda-evento-registrar", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      });
+      // no rompemos UX si falla; sólo intentamos parsear
+      await res.json().catch(() => ({}));
+    } catch {
+      // silencioso
+    }
+  }
 
   // Mantén input sincronizado si cambia la URL
   useEffect(() => { setQ(urlQ); }, [urlQ]);
@@ -34,10 +69,17 @@ export default function Resultados() {
       try {
         setLoading(true);
         setError("");
+
+        // ⚠️ Para evitar doble conteo cuando vienes del Dashboard,
+        // aquí NO registramos. Si quieres registrar también este ingreso inicial,
+        // descomenta la siguiente línea:
+        // await registrarBusqueda(term);
+
         const res = await buscarCasos({ q: term, page: 1, pageSize: 20 });
         if (!abort) {
-          setItems(res.items || []);
-          setTotal(res.total ?? (res.items?.length || 0));
+          const arr = res.items || [];
+          setItems(arr);
+          setTotal(res.total ?? arr.length);
         }
       } catch (e) {
         if (!abort) {
@@ -53,12 +95,17 @@ export default function Resultados() {
     return () => { abort = true; };
   }, [urlQ]);
 
-  // Submit de búsqueda: actualiza la URL (recargable/compartible)
-  const doSearch = () => {
+  // Submit de búsqueda: REGISTRA y luego actualiza la URL
+  const doSearch = useCallback(async () => {
     const term = q.trim();
     if (!term) return;
+
+    // 1) registrar aquí evita doble conteo y asegura que se registre cada acción del usuario en esta página
+    await registrarBusqueda(term);
+
+    // 2) actualizar URL (dispara el efecto que carga resultados)
     navigate(`/resultados?q=${encodeURIComponent(term)}`, { replace: true });
-  };
+  }, [q, navigate]);
 
   // Mensajes derivados
   const emptyMessage = useMemo(() => {
@@ -96,7 +143,7 @@ export default function Resultados() {
       </div>
 
       {/* Contenido */}
-      <div className="mt-6 px-4 w-full flex flex-col items-center">
+      <div className="mt-6 px-4 w-full flex flex-direction-col items-center">
         {/* Buscador */}
         <div className="w-full max-w-3xl flex items-center rounded-full bg-white/85 text-slate-900 overflow-hidden shadow-inner shadow-black/10">
           <input
