@@ -1,6 +1,8 @@
 // app/src/pages/AdminAgentes.jsx
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+
+const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 
 export default function AdminAgentes() {
   const nav = useNavigate();
@@ -8,29 +10,51 @@ export default function AdminAgentes() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
-  const [dias, setDias] = useState(30); // puedes cambiar el default
+  const [dias, setDias] = useState(30); // 7 | 30 | 90 | "" (histórico)
 
-  async function loadData(diasParam = dias) {
+  const abortRef = useRef(null);
+
+  async function loadData(diasParam) {
+    // cancela llamada anterior si aún está en vuelo
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       setLoading(true);
       setErr(null);
-      const url = diasParam ? `/api/agentes-busquedas?dias=${diasParam}` : "/api/agentes-busquedas";
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const url =
+        diasParam !== "" && diasParam != null
+          ? `${API_BASE}/agentes-busquedas?dias=${diasParam}`
+          : `${API_BASE}/agentes-busquedas`;
+
+      const res = await fetch(url, { signal: controller.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status} (${url})`);
       const data = await res.json();
       setItems(Array.isArray(data.items) ? data.items : []);
     } catch (e) {
-      setErr(e.message || "Error cargando datos");
-      setItems([]);
+      // ignora aborts, muestra otros errores
+      if (e.name !== "AbortError") {
+        setErr(e.message || "Error cargando datos");
+        setItems([]);
+      }
     } finally {
       setLoading(false);
     }
   }
 
+  // carga inicial
   useEffect(() => {
-    loadData();
+    loadData(dias);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // carga inicial
+  }, []);
+
+  // recargar cuando cambie el rango
+  useEffect(() => {
+    loadData(dias);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dias]);
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden">
@@ -71,8 +95,10 @@ export default function AdminAgentes() {
             <div className="flex items-center gap-3">
               <select
                 value={dias}
-                onChange={(e) => setDias(Number(e.target.value))}
-                onBlur={(e) => loadData(Number(e.target.value))}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setDias(v === "" ? "" : Number(v));
+                }}
                 className="px-3 py-2 rounded-lg bg-white/90 text-gray-800"
                 title="Rango de tiempo"
               >
@@ -83,7 +109,7 @@ export default function AdminAgentes() {
               </select>
 
               <button
-                onClick={() => loadData()}
+                onClick={() => loadData(dias)}
                 className="px-4 py-2 rounded-lg bg-blue-500/90 hover:bg-blue-600 text-white font-semibold shadow-md transition"
                 title="Refrescar"
               >
