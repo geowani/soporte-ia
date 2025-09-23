@@ -1,5 +1,5 @@
 // app/src/pages/AdminAgentes.jsx
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
@@ -55,6 +55,16 @@ export default function AdminAgentes() {
     loadData(dias);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dias]);
+
+  // 👇 Filtra para mostrar solo agentes con búsquedas > 0
+  const visibleItems = useMemo(
+    () =>
+      (items || [])
+        .filter((a) => (a?.busquedas_realizadas ?? 0) > 0)
+        // opcional: ordenar desc por cantidad
+        .sort((x, y) => (y.busquedas_realizadas ?? 0) - (x.busquedas_realizadas ?? 0)),
+    [items]
+  );
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden">
@@ -138,12 +148,12 @@ export default function AdminAgentes() {
                   <span>Búsquedas realizadas:</span>
                 </div>
                 <ul className="divide-y divide-gray-400">
-                  {items.length === 0 && (
+                  {visibleItems.length === 0 && (
                     <li className="py-6 px-2 md:px-4 text-gray-600">
                       Sin datos en el período seleccionado.
                     </li>
                   )}
-                  {items.map((a) => (
+                  {visibleItems.map((a) => (
                     <li
                       key={a.agente_id ?? a.agente_nombre}
                       className="grid grid-cols-[1fr_auto] items-center py-5 px-2 md:px-4"
