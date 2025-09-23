@@ -6,61 +6,60 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
   const [q, setQ] = useState("");
   const navigate = useNavigate();
 
-  // --- helpers de storage
-  function readUserId() {
+  // Lee un userId válido (>0). Si no, devuelve null.
+  function getUserId() {
     const raw = localStorage.getItem("userId");
     const id = Number(raw);
-    return Number.isFinite(id) ? id : null;
-  }
-  function writeUserId(id) {
-    if (id == null) return;
-    localStorage.setItem("userId", String(id));
-  }
-  function clearUserId() {
-    localStorage.removeItem("userId");
+    return Number.isFinite(id) && id > 0 ? id : null;
   }
 
-  // --- intenta auto-sincronizar el userId si no existe (p.ej. desde un perfil guardado)
+  // Limpia userId al cerrar sesión
+  const handleLogout = useCallback(() => {
+    localStorage.removeItem("userId");
+    onLogout?.();
+  }, [onLogout]);
+
+  // (Opcional) intenta poblar userId desde un perfil guardado
   useEffect(() => {
-    let id = readUserId();
-    if (id == null) {
+    if (getUserId() == null) {
       try {
-        const fromLocal = localStorage.getItem("user") || sessionStorage.getItem("user");
-        if (fromLocal) {
-          const u = JSON.parse(fromLocal);
+        const raw = localStorage.getItem("user") || sessionStorage.getItem("user");
+        if (raw) {
+          const u = JSON.parse(raw);
           const candidate = Number(u?.id_usuario ?? u?.id ?? u?.userId);
-          if (Number.isFinite(candidate)) {
-            writeUserId(candidate);
-            id = candidate;
+          if (Number.isFinite(candidate) && candidate > 0) {
+            localStorage.setItem("userId", String(candidate));
           }
         }
       } catch {}
     }
-    console.log("[Dashboard] userId activo:", id);
+    console.log("[Dashboard] userId activo:", getUserId());
   }, []);
 
-  // --- wrap del logout: limpia el id y luego llama al onLogout original
-  const handleLogout = useCallback(() => {
-    clearUserId();
-    onLogout?.();
-  }, [onLogout]);
-
-  // --- registrar búsqueda
+  // Registra la búsqueda en backend
   async function registrarBusqueda(term, { casoId = null, score = null } = {}) {
-    const userId = readUserId();                 // <- aquí se toma el id actual
+    const userId = getUserId(); // null si no hay válido
     const texto = String(term ?? "").trim();
     if (!texto) return;
 
     try {
-      console.log("[registrarBusqueda] userId:", userId, "q:", texto);
+      console.log("[registrarBusqueda] userId:", userId ?? "(anon)", "q:", texto);
+
+      const headers = { "Content-Type": "application/json" };
+      if (userId != null) headers["x-user-id"] = String(userId);
+
+      // arma el body sin forzar 0 ni undefined
+      const body = { q: texto };
+      if (casoId != null) body.casoId = casoId;
+      if (score != null) body.score = score;
+      if (userId != null) body.usuarioId = userId;
+
       const res = await fetch("/api/busqueda-evento-registrar", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(userId ? { "x-user-id": String(userId) } : {})
-        },
-        body: JSON.stringify({ q: texto, casoId, score, usuarioId: userId })
+        headers,
+        body: JSON.stringify(body),
       });
+
       const json = await res.json().catch(() => ({}));
       console.log("[registrarBusqueda] response:", res.status, json);
     } catch (e) {
@@ -68,14 +67,18 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
     }
   }
 
-  // --- buscar: registra y luego navega
+  // Ejecuta la búsqueda: registra y luego navega
   const search = useCallback(async () => {
     const term = q.trim();
     if (!term) {
       alert("Por favor ingresa un término para buscar");
       return;
     }
-    await registrarBusqueda(term); // espera para no cancelar el fetch
+
+    // 1) registra y espera (evita cancelar el fetch)
+    await registrarBusqueda(term);
+
+    // 2) navega a resultados
     navigate(`/resultados?q=${encodeURIComponent(term)}`);
   }, [q, navigate]);
 
@@ -104,7 +107,6 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
           backgroundRepeat: "no-repeat",
         }}
       />
-
       {/* Partículas */}
       <div
         className="absolute inset-0 -z-10 opacity-45"
