@@ -6,33 +6,61 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
   const [q, setQ] = useState("");
   const navigate = useNavigate();
 
-  // Lee el userId guardado al iniciar sesión
-  function getUserId() {
+  // --- helpers de storage
+  function readUserId() {
     const raw = localStorage.getItem("userId");
     const id = Number(raw);
     return Number.isFinite(id) ? id : null;
   }
+  function writeUserId(id) {
+    if (id == null) return;
+    localStorage.setItem("userId", String(id));
+  }
+  function clearUserId() {
+    localStorage.removeItem("userId");
+  }
 
-  // Registra el evento de búsqueda en el backend
+  // --- intenta auto-sincronizar el userId si no existe (p.ej. desde un perfil guardado)
+  useEffect(() => {
+    let id = readUserId();
+    if (id == null) {
+      try {
+        const fromLocal = localStorage.getItem("user") || sessionStorage.getItem("user");
+        if (fromLocal) {
+          const u = JSON.parse(fromLocal);
+          const candidate = Number(u?.id_usuario ?? u?.id ?? u?.userId);
+          if (Number.isFinite(candidate)) {
+            writeUserId(candidate);
+            id = candidate;
+          }
+        }
+      } catch {}
+    }
+    console.log("[Dashboard] userId activo:", id);
+  }, []);
+
+  // --- wrap del logout: limpia el id y luego llama al onLogout original
+  const handleLogout = useCallback(() => {
+    clearUserId();
+    onLogout?.();
+  }, [onLogout]);
+
+  // --- registrar búsqueda
   async function registrarBusqueda(term, { casoId = null, score = null } = {}) {
-    const userId = getUserId();
+    const userId = readUserId();                 // <- aquí se toma el id actual
     const texto = String(term ?? "").trim();
     if (!texto) return;
 
     try {
-      // útil para verificar que viaja el ID
       console.log("[registrarBusqueda] userId:", userId, "q:", texto);
-
       const res = await fetch("/api/busqueda-evento-registrar", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...(userId ? { "x-user-id": String(userId) } : {})
         },
-        // también lo mando en el body como respaldo
         body: JSON.stringify({ q: texto, casoId, score, usuarioId: userId })
       });
-
       const json = await res.json().catch(() => ({}));
       console.log("[registrarBusqueda] response:", res.status, json);
     } catch (e) {
@@ -40,25 +68,21 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
     }
   }
 
-  // Ejecuta la búsqueda: registra y luego navega
+  // --- buscar: registra y luego navega
   const search = useCallback(async () => {
     const term = q.trim();
     if (!term) {
       alert("Por favor ingresa un término para buscar");
       return;
     }
-
-    // 1) registra y espera (evita cancelación por unmount)
-    await registrarBusqueda(term);
-
-    // 2) navega a resultados
+    await registrarBusqueda(term); // espera para no cancelar el fetch
     navigate(`/resultados?q=${encodeURIComponent(term)}`);
   }, [q, navigate]);
 
-  // Esc para cerrar sesión y Enter para buscar
+  // ESC cierra sesión / ENTER busca
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === "Escape") onLogout?.();
+      if (e.key === "Escape") handleLogout();
       if (e.key === "Enter") {
         e.preventDefault();
         search();
@@ -66,7 +90,7 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onLogout, search]);
+  }, [handleLogout, search]);
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
@@ -102,7 +126,7 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
 
       {/* Salir */}
       <button
-        onClick={onLogout}
+        onClick={handleLogout}
         className="absolute right-6 top-6 px-5 py-2 rounded-full bg-red-500/90 hover:bg-red-600 font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-white/50"
         aria-label="Cerrar sesión"
         title="Cerrar sesión"
@@ -134,12 +158,8 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
                 aria-label="Buscar"
                 title="Buscar"
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  className="h-5 w-5 fill-slate-700"
-                >
-                  <path d="M15.5 14h-.79l-.28-.27a6.471 6.471 0 0 0 1.57-4.23C16 6.01 12.99 3 9.5 3S3 6.01 3 9.5 6.01 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99 1.49-1.49-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5 fill-slate-700">
+                  <path d="M15.5 14h-.79l-.28-.27a6.471 6.471 0 0 0 1.57-4.23C16 6.01 12.99 3 9.5 3S3 6.01 3 9.5 6.01 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99 1.49-1.49-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
                 </svg>
               </button>
             </div>
@@ -150,10 +170,7 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
             <button
               onClick={() => navigate("/sugerencias")}
               className="px-6 py-3 rounded-xl font-extrabold text-white flex items-center gap-2 mx-auto"
-              style={{
-                backgroundColor: "#59d2e6",
-                boxShadow: "0 8px 22px rgba(89,210,230,.30)",
-              }}
+              style={{ backgroundColor: "#59d2e6", boxShadow: "0 8px 22px rgba(89,210,230,.30)" }}
               aria-label="Sugerencias"
               title="Sugerencias"
             >
