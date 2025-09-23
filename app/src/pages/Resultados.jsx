@@ -1,5 +1,5 @@
 // app/src/pages/Resultados.jsx
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { buscarCasos } from "../api";
 
@@ -17,6 +17,9 @@ export default function Resultados() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // Lleva control del último término ya registrado para evitar dobles/omisiones
+  const lastRegisteredRef = useRef(null);
+
   // helper para userId válido
   function getUserId() {
     const raw = localStorage.getItem("userId");
@@ -24,9 +27,9 @@ export default function Resultados() {
     return Number.isFinite(id) && id > 0 ? id : null;
   }
 
-  // registra búsqueda en backend
+  // registra búsqueda en backend (segura con userId opcional)
   async function registrarBusqueda(term, { casoId = null, score = null } = {}) {
-    const userId = getUserId();             // null si no hay id válido
+    const userId = getUserId();
     const texto = String(term ?? "").trim();
     if (!texto) return;
 
@@ -44,36 +47,37 @@ export default function Resultados() {
         headers,
         body: JSON.stringify(body),
       });
-      // no rompemos UX si falla; sólo intentamos parsear
       await res.json().catch(() => ({}));
     } catch {
-      // silencioso
+      // silencioso; no romper UX
     }
   }
 
   // Mantén input sincronizado si cambia la URL
   useEffect(() => { setQ(urlQ); }, [urlQ]);
 
-  // Ejecuta la búsqueda cada vez que cambie ?q=
+  // Carga resultados cuando cambia ?q= y REGISTRA si aún no está registrado ese término
   useEffect(() => {
     const term = urlQ.trim();
-    if (!term) {
-      setItems([]);
-      setTotal(0);
-      setError("");
-      return;
-    }
-
     let abort = false;
+
     (async () => {
+      if (!term) {
+        setItems([]);
+        setTotal(0);
+        setError("");
+        return;
+      }
+
       try {
         setLoading(true);
         setError("");
 
-        // ⚠️ Para evitar doble conteo cuando vienes del Dashboard,
-        // aquí NO registramos. Si quieres registrar también este ingreso inicial,
-        // descomenta la siguiente línea:
-        // await registrarBusqueda(term);
+        // Si este término aún no ha sido registrado (p.ej. vienes desde Dashboard), regístralo aquí
+        if (lastRegisteredRef.current !== term) {
+          await registrarBusqueda(term);
+          lastRegisteredRef.current = term; // marca como registrado
+        }
 
         const res = await buscarCasos({ q: term, page: 1, pageSize: 20 });
         if (!abort) {
@@ -95,15 +99,19 @@ export default function Resultados() {
     return () => { abort = true; };
   }, [urlQ]);
 
-  // Submit de búsqueda: REGISTRA y luego actualiza la URL
+  // Submit de búsqueda desde esta página:
+  // Registra si el término cambió; luego actualiza la URL (lo que recarga resultados).
   const doSearch = useCallback(async () => {
     const term = q.trim();
     if (!term) return;
 
-    // 1) registrar aquí evita doble conteo y asegura que se registre cada acción del usuario en esta página
-    await registrarBusqueda(term);
+    // Si el usuario cambia de término, asegura registro aquí
+    if (lastRegisteredRef.current !== term) {
+      await registrarBusqueda(term);
+      lastRegisteredRef.current = term;
+    }
 
-    // 2) actualizar URL (dispara el efecto que carga resultados)
+    // Actualiza URL (dispara el useEffect de arriba para cargar resultados)
     navigate(`/resultados?q=${encodeURIComponent(term)}`, { replace: true });
   }, [q, navigate]);
 
