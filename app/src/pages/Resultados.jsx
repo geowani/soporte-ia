@@ -105,13 +105,11 @@ export default function Resultados() {
     const term = q.trim();
     if (!term) return;
 
-    // Si el usuario cambia de término, asegura registro aquí
     if (lastRegisteredRef.current !== term) {
       await registrarBusqueda(term);
       lastRegisteredRef.current = term;
     }
 
-    // Actualiza URL (dispara el useEffect de arriba para cargar resultados)
     navigate(`/resultados?q=${encodeURIComponent(term)}`, { replace: true });
   }, [q, navigate]);
 
@@ -151,7 +149,8 @@ export default function Resultados() {
       </div>
 
       {/* Contenido */}
-      <div className="mt-6 px-4 w-full flex flex-direction-col items-center">
+      {/* 👇 corregido: 'flex-direction-col' -> 'flex-col' */}
+      <div className="mt-6 px-4 w-full flex flex-col items-center">
         {/* Buscador */}
         <div className="w-full max-w-3xl flex items-center rounded-full bg-white/85 text-slate-900 overflow-hidden shadow-inner shadow-black/10">
           <input
