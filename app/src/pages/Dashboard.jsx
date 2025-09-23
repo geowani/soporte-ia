@@ -1,18 +1,52 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 
 export default function Dashboard({ onLogout, isBlocked = false }) {
   const [q, setQ] = useState("");
   const navigate = useNavigate();
 
-const search = () => {
-  const term = q.trim();
-  if (!term) {
-    alert("Por favor ingresa un término para buscar");
-    return;
+  // --- Lee el userId guardado al iniciar sesión (igual que en AdminHistorial)
+  function getUserId() {
+    const id = Number(localStorage.getItem("userId"));
+    return Number.isFinite(id) ? id : null;
   }
-  navigate(`/resultados?q=${encodeURIComponent(term)}`);
-};
+
+  // --- Registra el evento de búsqueda en el backend (Azure Functions)
+  async function registrarBusqueda(term, { casoId = null, score = null } = {}) {
+    try {
+      const userId = getUserId();
+      // si no hay término, no registres
+      const q = String(term ?? "").trim();
+      if (!q) return;
+
+      // fire-and-forget: no esperamos la respuesta para no frenar la UX
+      fetch("/api/busqueda-evento-registrar", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(userId ? { "x-user-id": String(userId) } : {}),
+        },
+        body: JSON.stringify({ q, casoId, score }),
+      }).catch(() => {});
+    } catch {
+      // silencioso: no romper la búsqueda si falla el registro
+    }
+  }
+
+  // --- Ejecuta la búsqueda: registra y navega
+  const search = useCallback(() => {
+    const term = q.trim();
+    if (!term) {
+      alert("Por favor ingresa un término para buscar");
+      return;
+    }
+
+    // 1) registra (no bloqueante)
+    registrarBusqueda(term);
+
+    // 2) navega a resultados
+    navigate(`/resultados?q=${encodeURIComponent(term)}`);
+  }, [q, navigate]);
 
   // Esc para cerrar sesión y Enter para buscar
   useEffect(() => {
@@ -25,7 +59,7 @@ const search = () => {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onLogout, q]); // q usado dentro de search
+  }, [onLogout, search]);
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
@@ -55,7 +89,9 @@ const search = () => {
           animation: "float 12s linear infinite",
         }}
       />
-      <style>{`@keyframes float { 0%{transform:translateY(0)} 50%{transform:translateY(-10px)} 100%{transform:translateY(0)} }`}</style>
+      <style>
+        {`@keyframes float { 0%{transform:translateY(0)} 50%{transform:translateY(-10px)} 100%{transform:translateY(0)} }`}
+      </style>
 
       {/* Salir */}
       <button
@@ -91,19 +127,26 @@ const search = () => {
                 aria-label="Buscar"
                 title="Buscar"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5 fill-slate-700">
-                  <path d="M15.5 14h-.79l-.28-.27a6.471 6.471 0 0 0 1.57-4.23C16 6.01 12.99 3 9.5 3S3 6.01 3 9.5 6.01 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99 1.49-1.49-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  className="h-5 w-5 fill-slate-700"
+                >
+                  <path d="M15.5 14h-.79l-.28-.27a6.471 6.471 0 0 0 1.57-4.23C16 6.01 12.99 3 9.5 3S3 6.01 3 9.5 6.01 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99 1.49-1.49-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
                 </svg>
               </button>
             </div>
           </div>
 
           {/* Botón Sugerencias separado */}
-          <div className="mt-12"> {/* separación extra respecto al buscador */}
+          <div className="mt-12">
             <button
               onClick={() => navigate("/sugerencias")}
               className="px-6 py-3 rounded-xl font-extrabold text-white flex items-center gap-2 mx-auto"
-              style={{ backgroundColor: "#59d2e6", boxShadow: "0 8px 22px rgba(89,210,230,.30)" }}
+              style={{
+                backgroundColor: "#59d2e6",
+                boxShadow: "0 8px 22px rgba(89,210,230,.30)",
+              }}
               aria-label="Sugerencias"
               title="Sugerencias"
             >
