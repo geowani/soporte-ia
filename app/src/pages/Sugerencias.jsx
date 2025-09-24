@@ -37,27 +37,53 @@ function getUserEmail() {
 // Helpers de validación
 // =====================
 const onlyDigits = (s) => s.replace(/[^\d]/g, "");
+
+// Todo el número igual (00000, 11111, etc.)
 const isAllSameDigits = (s) => s.length > 0 && /^(\d)\1+$/.test(s);
 
-// Secuencias 01234, 12345, 54321, 9876, etc. (longitud >= 3)
-const isSequential = (s) => {
-  if (s.length < 3) return false;
-  let asc = true, desc = true;
+// Racha de N (o más) dígitos iguales consecutivos en cualquier parte
+const hasSameRun = (s, N = 5) => {
+  if (s.length < N) return false;
+  let run = 1;
+  for (let i = 1; i < s.length; i++) {
+    if (s[i] === s[i - 1]) {
+      run++;
+      if (run >= N) return true;
+    } else {
+      run = 1;
+    }
+  }
+  return false;
+};
+
+// Racha de N (o más) consecutivos +/-1 en cualquier parte (…12345…, …54321…)
+const hasSequentialRun = (s, N = 5) => {
+  if (s.length < N) return false;
+  let up = 1, down = 1;
   for (let i = 1; i < s.length; i++) {
     const prev = s.charCodeAt(i - 1);
     const curr = s.charCodeAt(i);
-    if (curr !== prev + 1) asc = false;
-    if (curr !== prev - 1) desc = false;
-    if (!asc && !desc) return false;
+    if (curr === prev + 1) {        // ascendente
+      up++;   down = 1;
+    } else if (curr === prev - 1) { // descendente
+      down++; up = 1;
+    } else {
+      up = 1; down = 1;
+    }
+    if (up >= N || down >= N) return true;
   }
-  return asc || desc;
+  return false;
 };
 
 const validateCase = (s) => {
   if (!s) return { ok: false, msg: "La sugerencia de caso debe contener únicamente números" };
   if (!/^\d+$/.test(s)) return { ok: false, msg: "Solo se permiten dígitos (0-9)" };
-  if (isAllSameDigits(s)) return { ok: false, msg: "No se permiten números repetidos (ej. 00000, 11111)" };
-  if (isSequential(s)) return { ok: false, msg: "No se permiten secuencias consecutivas (ej. 12345 o 54321)" };
+
+  // Reglas anti-fáciles
+  if (isAllSameDigits(s))    return { ok: false, msg: "No se permiten todos los dígitos iguales (00000, 11111…)" };
+  if (hasSameRun(s, 5))      return { ok: false, msg: "No se permiten 5+ dígitos iguales consecutivos" };
+  if (hasSequentialRun(s, 5))return { ok: false, msg: "No se permiten secuencias de 5+ consecutivos (12345 o 54321)" };
+
   return { ok: true, msg: "" };
 };
 
@@ -206,6 +232,8 @@ export default function Sugerencias() {
                   setError(validateCase(clean).msg);
                 }}
                 autoComplete="off"
+                aria-invalid={invalid}
+                title="Solo números; sin rachas de 5+ iguales ni 5+ consecutivos"
               />
 
               {error && (
