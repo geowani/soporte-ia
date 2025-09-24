@@ -27,13 +27,11 @@ export default function AdminHistorial() {
     const [, Y, M, D] = m;
     return new Date(Number(Y), Number(M) - 1, Number(D), 0, 0, 0, 0); // local 00:00
   }
-
   function addDays(d, n) {
     const x = new Date(d);
     x.setDate(x.getDate() + n);
     return x;
   }
-
   // ISO naive (sin zona), para que el backend lo trate como local
   function toNaiveIso(d) {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
@@ -49,10 +47,23 @@ export default function AdminHistorial() {
       r?.fecha_creacion ??
       null;
     if (!raw) return null;
-    const s = String(raw);
+    const s = String(raw).trim();
     const norm = s.includes("T") ? s : s.replace(" ", "T");
-    const d = new Date(norm);
+    const d = new Date(norm); // si trae Z será UTC; si no, local
     return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  // Clave de día YYYYMMDD (evita problemas de zona horaria)
+  function ymdKey(d) {
+    if (!d) return null;
+    return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+  }
+  function ymdKeyFromInput(s) {
+    if (!s) return null;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+    if (!m) return null;
+    const [, Y, M, D] = m;
+    return Number(Y) * 10000 + Number(M) * 100 + Number(D);
   }
 
   // ---------------- buscar ----------------
@@ -70,7 +81,6 @@ export default function AdminHistorial() {
 
       const lim = Math.min(Math.max(parseInt(String(limit || 50), 10), 1), 500);
 
-      // Construimos QS
       const params = new URLSearchParams();
       params.set("limit", String(lim));
       if (q && q.trim()) params.set("q", q.trim());
@@ -80,10 +90,8 @@ export default function AdminHistorial() {
         let dFrom = parseYMD(from);
         let dTo = parseYMD(to);
         if (!dFrom || !dTo) throw new Error("Fechas inválidas (usa el selector de fecha).");
-        // corrige si están invertidas
         if (dFrom > dTo) { const t = dFrom; dFrom = dTo; dTo = t; }
         const toExclusive = addDays(dTo, 1);
-
         params.set("from", toNaiveIso(dFrom));
         params.set("to", toNaiveIso(toExclusive));
       }
@@ -91,10 +99,9 @@ export default function AdminHistorial() {
       const resp = await fetch(`/api/casos/ultimos?${params.toString()}`, { credentials: "include" });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const json = await resp.json();
-
       const items = Array.isArray(json?.items) ? json.items : [];
 
-      // Ordenamos por fecha de agregado (desc), con fallback
+      // Ordena por fecha de agregado (desc)
       items.sort((a, b) => {
         const da = getAddedDate(a)?.getTime() ?? 0;
         const db = getAddedDate(b)?.getTime() ?? 0;
@@ -112,17 +119,31 @@ export default function AdminHistorial() {
     }
   }
 
-  // Filtro en memoria SOLO por texto (el rango ya lo aplicó el backend)
+  // Filtro en memoria: por TEXTO y, si el usuario puso fechas, también por DÍA (inclusive)
   const filtered = useMemo(() => {
+    let kFrom = ymdKeyFromInput(from);
+    let kTo   = ymdKeyFromInput(to);
+    if (kFrom && kTo && kFrom > kTo) { const t = kFrom; kFrom = kTo; kTo = t; }
+
     const qLower = (q || "").toLowerCase();
-    if (!qLower) return rows;
+
     return (rows || []).filter((r) => {
+      // texto
       const t = (r?.titulo_pref || "").toLowerCase();
       const n = String(r?.numero_caso || "").toLowerCase();
       const who = (r?.creado_por || "").toLowerCase();
-      return t.includes(qLower) || n.includes(qLower) || who.includes(qLower);
+      const okText = !qLower || t.includes(qLower) || n.includes(qLower) || who.includes(qLower);
+
+      // por día (solo si el usuario indicó fechas)
+      if (kFrom || kTo) {
+        const dk = ymdKey(getAddedDate(r));
+        const okFrom = !kFrom || (dk !== null && dk >= kFrom);
+        const okTo   = !kTo   || (dk !== null && dk <= kTo);
+        return okText && okFrom && okTo;
+      }
+      return okText;
     });
-  }, [rows, q]);
+  }, [rows, q, from, to]);
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
