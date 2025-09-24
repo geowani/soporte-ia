@@ -54,7 +54,7 @@ const isSequential = (s) => {
 };
 
 const validateCase = (s) => {
-  if (!s) return { ok: false, msg: "Ingresa el número de caso" };
+  if (!s) return { ok: false, msg: "La sugerencia de caso debe contener únicamente números" };
   if (!/^\d+$/.test(s)) return { ok: false, msg: "Solo se permiten dígitos (0-9)" };
   if (isAllSameDigits(s)) return { ok: false, msg: "No se permiten números repetidos (ej. 00000, 11111)" };
   if (isSequential(s)) return { ok: false, msg: "No se permiten secuencias consecutivas (ej. 12345 o 54321)" };
