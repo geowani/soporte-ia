@@ -38,11 +38,11 @@ function getUserEmail() {
 // =====================
 const onlyDigits = (s) => s.replace(/[^\d]/g, "");
 
-// Todo el número igual (00000, 11111, etc.)
+// Todo el número igual (0000, 1111, etc.)
 const isAllSameDigits = (s) => s.length > 0 && /^(\d)\1+$/.test(s);
 
 // Racha de N (o más) dígitos iguales consecutivos en cualquier parte
-const hasSameRun = (s, N = 5) => {
+const hasSameRun = (s, N = 3) => {
   if (s.length < N) return false;
   let run = 1;
   for (let i = 1; i < s.length; i++) {
@@ -56,8 +56,8 @@ const hasSameRun = (s, N = 5) => {
   return false;
 };
 
-// Racha de N (o más) consecutivos +/-1 en cualquier parte (…12345…, …54321…)
-const hasSequentialRun = (s, N = 5) => {
+// Racha de N (o más) consecutivos +/-1 en cualquier parte (…123…, …321…)
+const hasSequentialRun = (s, N = 3) => {
   if (s.length < N) return false;
   let up = 1, down = 1;
   for (let i = 1; i < s.length; i++) {
@@ -79,10 +79,10 @@ const validateCase = (s) => {
   if (!s) return { ok: false, msg: "La sugerencia de caso debe contener únicamente números" };
   if (!/^\d+$/.test(s)) return { ok: false, msg: "Solo se permiten dígitos (0-9)" };
 
-  // Reglas anti-fáciles
-  if (isAllSameDigits(s))    return { ok: false, msg: "No se permiten todos los dígitos iguales (00000, 11111…)" };
-  if (hasSameRun(s, 5))      return { ok: false, msg: "No se permiten 5+ dígitos iguales consecutivos" };
-  if (hasSequentialRun(s, 5))return { ok: false, msg: "No se permiten secuencias de 5+ consecutivos (12345 o 54321)" };
+  // Reglas
+  if (isAllSameDigits(s))      return { ok: false, msg: "No se permiten todos los dígitos iguales" };
+  if (hasSameRun(s, 3))        return { ok: false, msg: "No se permiten 3+ dígitos iguales consecutivos (ej. 000, 111)" };
+  if (hasSequentialRun(s, 3))  return { ok: false, msg: "No se permiten números consecutivos (ej. 123, 321, 0123)" };
 
   return { ok: true, msg: "" };
 };
@@ -233,7 +233,7 @@ export default function Sugerencias() {
                 }}
                 autoComplete="off"
                 aria-invalid={invalid}
-                title="Solo números; sin rachas de 5+ iguales ni 5+ consecutivos"
+                title="Solo números; sin consecutivos (123/321) ni 3+ repetidos (000/111)"
               />
 
               {error && (
