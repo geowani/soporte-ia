@@ -227,7 +227,7 @@ export default function Sugerencias() {
                 pattern="[0-9]*"
                 maxLength={11}
                 className="w-full max-w-md rounded-full bg-slate-100 text-slate-900 px-4 py-3 outline-none shadow-inner shadow-black/10 focus:ring-4 ring-cyan-300 text-center tracking-widest"
-                placeholder="Número de Caso (7–11 dígitos)"
+                placeholder="Número de Caso"
                 value={caso}
                 onChange={handleChange}
                 onPaste={(e) => {
