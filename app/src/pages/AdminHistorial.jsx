@@ -11,15 +11,35 @@ export default function AdminHistorial() {
 
   // filtros UI
   const [q, setQ] = useState("");
-  const [from, setFrom] = useState(""); // yyyy-mm-dd
-  const [to, setTo] = useState("");     // yyyy-mm-dd
+  const [from, setFrom] = useState(""); // yyyy-mm-dd (input type="date")
+  const [to, setTo] = useState("");     // yyyy-mm-dd (input type="date")
   const [limit, setLimit] = useState(50);
 
   // control de búsqueda
   const [hasSearched, setHasSearched] = useState(false);
 
-  // --- helpers de fecha (robustos contra zona horaria) ---
-  // Devuelve Date desde el campo más confiable devuelto por backend
+  // ---------------- util fechas ----------------
+  const pad = (n) => String(n).padStart(2, "0");
+
+  function parseYMD(s) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || ""));
+    if (!m) return null;
+    const [, Y, M, D] = m;
+    return new Date(Number(Y), Number(M) - 1, Number(D), 0, 0, 0, 0); // local 00:00
+  }
+
+  function addDays(d, n) {
+    const x = new Date(d);
+    x.setDate(x.getDate() + n);
+    return x;
+  }
+
+  // ISO naive (sin zona), para que el backend lo trate como local
+  function toNaiveIso(d) {
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+
+  // Fecha “agregado” más confiable que envía tu backend (para ordenar/muestrear)
   function getAddedDate(r) {
     const raw =
       r?.creado_en ??
@@ -28,51 +48,53 @@ export default function AdminHistorial() {
       r?.createdAt ??
       r?.fecha_creacion ??
       null;
-
     if (!raw) return null;
-
-    const asStr = String(raw).trim();
-    // Normaliza "YYYY-MM-DD HH:mm:ss" -> "YYYY-MM-DDTHH:mm:ss"
-    const norm = asStr.includes("T") ? asStr : asStr.replace(" ", "T");
-    const d = new Date(norm); // si trae "Z", será UTC; si no, local
+    const s = String(raw);
+    const norm = s.includes("T") ? s : s.replace(" ", "T");
+    const d = new Date(norm);
     return Number.isNaN(d.getTime()) ? null : d;
   }
 
-  // Convierte una fecha a clave entera YYYYMMDD (solo día, sin horas)
-  // *Si d es null -> null
-  function ymdKey(d) {
-    if (!d) return null;
-    return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
-  }
-
-  // Parsea 'yyyy-mm-dd' del <input type="date"> a clave YYYYMMDD
-  function ymdKeyFromInput(s) {
-    if (!s) return null;
-    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
-    if (!m) return null;
-    const [, Y, M, D] = m;
-    return Number(Y) * 10000 + Number(M) * 100 + Number(D);
-  }
-
-  // fetch (solo cuando el usuario hace clic en Buscar)
+  // ---------------- buscar ----------------
   async function loadCases() {
-    // Permitir buscar si hay TEXTO o si hay AMBAS fechas
+    // Debe haber TEXTO o AMBAS fechas
     if (!q && (!from || !to)) {
       setHasSearched(false);
       setErr("Escribe texto o completa ambas fechas para buscar.");
       return;
     }
+
     try {
       setLoading(true);
       setErr("");
-      const lim = Math.min(Math.max(parseInt(limit || "1", 10), 1), 500); // rango 1..500
-      const resp = await fetch(`/api/casos/ultimos?limit=${lim}`, { credentials: "include" });
+
+      const lim = Math.min(Math.max(parseInt(String(limit || 50), 10), 1), 500);
+
+      // Construimos QS
+      const params = new URLSearchParams();
+      params.set("limit", String(lim));
+      if (q && q.trim()) params.set("q", q.trim());
+
+      if (from && to) {
+        // rango con fin EXCLUSIVO
+        let dFrom = parseYMD(from);
+        let dTo = parseYMD(to);
+        if (!dFrom || !dTo) throw new Error("Fechas inválidas (usa el selector de fecha).");
+        // corrige si están invertidas
+        if (dFrom > dTo) { const t = dFrom; dFrom = dTo; dTo = t; }
+        const toExclusive = addDays(dTo, 1);
+
+        params.set("from", toNaiveIso(dFrom));
+        params.set("to", toNaiveIso(toExclusive));
+      }
+
+      const resp = await fetch(`/api/casos/ultimos?${params.toString()}`, { credentials: "include" });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const json = await resp.json();
 
-      const items = Array.isArray(json.items) ? json.items : [];
+      const items = Array.isArray(json?.items) ? json.items : [];
 
-      // Ordena por fecha de agregado (desc), con fallback a fecha_creacion
+      // Ordenamos por fecha de agregado (desc), con fallback
       items.sort((a, b) => {
         const da = getAddedDate(a)?.getTime() ?? 0;
         const db = getAddedDate(b)?.getTime() ?? 0;
@@ -82,48 +104,29 @@ export default function AdminHistorial() {
       setRows(items);
     } catch (e) {
       console.error("AdminHistorial fetch error:", e);
-      setErr("No se pudieron cargar los últimos casos.");
+      setErr(e.message || "No se pudieron cargar los casos.");
+      setRows([]);
     } finally {
       setLoading(false);
       setHasSearched(true);
     }
   }
 
-  // Filtrado en memoria (por texto + rango de FECHA DE AGREGADO, por DÍA)
+  // Filtro en memoria SOLO por texto (el rango ya lo aplicó el backend)
   const filtered = useMemo(() => {
-    // Preparamos claves de día (YYYYMMDD) para rangos inclusivos
-    let kFrom = ymdKeyFromInput(from);
-    let kTo   = ymdKeyFromInput(to);
-
-    // Si el usuario invirtió el rango, lo corregimos
-    if (kFrom && kTo && kFrom > kTo) {
-      const tmp = kFrom;
-      kFrom = kTo;
-      kTo = tmp;
-    }
-
     const qLower = (q || "").toLowerCase();
-
-    return (rows || []).filter(r => {
-      // Texto
+    if (!qLower) return rows;
+    return (rows || []).filter((r) => {
       const t = (r?.titulo_pref || "").toLowerCase();
       const n = String(r?.numero_caso || "").toLowerCase();
       const who = (r?.creado_por || "").toLowerCase();
-      const okText =
-        !qLower || t.includes(qLower) || n.includes(qLower) || who.includes(qLower);
-
-      // Día agregado (clave)
-      const dKey = ymdKey(getAddedDate(r));
-      const okFrom = !kFrom || (dKey !== null && dKey >= kFrom);
-      const okTo   = !kTo   || (dKey !== null && dKey <= kTo); // inclusivo
-
-      return okText && okFrom && okTo;
+      return t.includes(qLower) || n.includes(qLower) || who.includes(qLower);
     });
-  }, [rows, q, from, to]);
+  }, [rows, q]);
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
-      {/* Fondo como tu diseño original */}
+      {/* Fondo */}
       <div
         className="absolute inset-0 -z-20"
         style={{
@@ -172,20 +175,20 @@ export default function AdminHistorial() {
                 className="rounded-lg px-3 py-2 border border-gray-300"
                 placeholder="Buscar (caso, título o usuario)"
                 value={q}
-                onChange={e => setQ(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") loadCases(); }} // atajo Enter
+                onChange={(e) => setQ(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") loadCases(); }}
               />
               <input
                 type="date"
                 className="rounded-lg px-3 py-2 border border-gray-300"
                 value={from}
-                onChange={e => setFrom(e.target.value)}
+                onChange={(e) => setFrom(e.target.value)}
               />
               <input
                 type="date"
                 className="rounded-lg px-3 py-2 border border-gray-300"
                 value={to}
-                onChange={e => setTo(e.target.value)}
+                onChange={(e) => setTo(e.target.value)}
               />
               <input
                 type="number"
@@ -193,7 +196,7 @@ export default function AdminHistorial() {
                 max={500}
                 className="rounded-lg px-3 py-2 border border-gray-300"
                 value={limit}
-                onChange={e => setLimit(e.target.value)}
+                onChange={(e) => setLimit(e.target.value)}
                 placeholder="Resultados"
                 title="Resultados máximos a mostrar"
               />
@@ -208,8 +211,8 @@ export default function AdminHistorial() {
                 </button>
                 <button
                   onClick={() => {
-                    setQ(""); setFrom(""); setTo(""); setRows([]);
-                    setHasSearched(false); setErr("");
+                    setQ(""); setFrom(""); setTo("");
+                    setRows([]); setHasSearched(false); setErr("");
                   }}
                   className="rounded-lg px-3 py-2 bg-gray-800 text-white"
                 >
@@ -218,7 +221,7 @@ export default function AdminHistorial() {
               </div>
             </div>
 
-            {/* Header tabla */}
+            {/* Head de tabla */}
             <div className="grid grid-cols-[1fr_2fr_1fr] font-semibold text-gray-700 border-b border-gray-300 pb-4 mb-4">
               <span>Casos</span>
               <span>Título</span>
@@ -229,8 +232,7 @@ export default function AdminHistorial() {
             {err && <div className="py-6 text-red-600">{err}</div>}
             {!hasSearched && !loading && !err && (
               <div className="py-6 text-gray-600">
-                Ingresa <b>texto</b> o <b>fecha desde</b> y <b>fecha hasta</b> (día en que se
-                <b> agregaron</b>), define <b>Resultados</b> y presiona <b>Buscar</b>.
+                Ingresa <b>texto</b> o <b>fecha desde</b> y <b>fecha hasta</b>, define <b>Resultados</b> y presiona <b>Buscar</b>.
               </div>
             )}
 
