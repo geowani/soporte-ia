@@ -38,7 +38,7 @@ function getUserEmail() {
 // =====================
 const onlyDigits = (s) => s.replace(/[^\d]/g, "");
 
-// Todo el número igual (0000, 1111, etc.)
+// Todo el número igual (0000000, 1111111, etc.)
 const isAllSameDigits = (s) => s.length > 0 && /^(\d)\1+$/.test(s);
 
 // Racha de N (o más) dígitos iguales consecutivos en cualquier parte
@@ -79,10 +79,14 @@ const validateCase = (s) => {
   if (!s) return { ok: false, msg: "La sugerencia de caso debe contener únicamente números" };
   if (!/^\d+$/.test(s)) return { ok: false, msg: "Solo se permiten dígitos (0-9)" };
 
-  // Reglas
-  if (isAllSameDigits(s))      return { ok: false, msg: "No se permiten todos los dígitos iguales (ej. 0000)" };
-  if (hasSameRun(s, 3))        return { ok: false, msg: "No se permiten más de 4 dígitos iguales consecutivos (ej. 000)" };
-  if (hasSequentialRun(s, 3))  return { ok: false, msg: "No se permiten números consecutivos (ej. 123)" };
+  // Longitud 7–11
+  if (s.length < 7) return { ok: false, msg: "El número de caso debe tener al menos 7 dígitos" };
+  if (s.length > 11) return { ok: false, msg: "El número de caso debe tener como máximo 11 dígitos" };
+
+  // Reglas de patrón
+  if (isAllSameDigits(s))        return { ok: false, msg: "No se permiten todos los dígitos iguales" };
+  if (hasSameRun(s, 4))          return { ok: false, msg: "No se permiten 4+ dígitos iguales consecutivos (ej. 0000)" };
+  if (hasSequentialRun(s, 3))    return { ok: false, msg: "No se permiten números consecutivos (ej. 123 o 321)" };
 
   return { ok: true, msg: "" };
 };
@@ -94,7 +98,8 @@ export default function Sugerencias() {
   const navigate = useNavigate();
 
   const handleChange = (e) => {
-    const clean = onlyDigits(e.target.value);
+    // limpia a dígitos y corta a 11
+    const clean = onlyDigits(e.target.value).slice(0, 11);
     setCaso(clean);
     setError(validateCase(clean).msg);
   };
@@ -220,20 +225,21 @@ export default function Sugerencias() {
                 type="text"
                 inputMode="numeric"
                 pattern="[0-9]*"
+                maxLength={11}
                 className="w-full max-w-md rounded-full bg-slate-100 text-slate-900 px-4 py-3 outline-none shadow-inner shadow-black/10 focus:ring-4 ring-cyan-300 text-center tracking-widest"
-                placeholder="Número de Caso"
+                placeholder="Número de Caso (7–11 dígitos)"
                 value={caso}
                 onChange={handleChange}
                 onPaste={(e) => {
                   e.preventDefault();
                   const pasted = e.clipboardData.getData("text") || "";
-                  const clean = onlyDigits(pasted);
+                  const clean = onlyDigits(pasted).slice(0, 11);
                   setCaso(clean);
                   setError(validateCase(clean).msg);
                 }}
                 autoComplete="off"
                 aria-invalid={invalid}
-                title="Solo números; sin consecutivos (123/321) ni 3+ repetidos (000/111)"
+                title="7–11 dígitos. Sin consecutivos (123/321) ni 4+ repetidos (0000/1111)."
               />
 
               {error && (
