@@ -18,6 +18,13 @@ export default function AdminHistorial() {
   // control de búsqueda
   const [hasSearched, setHasSearched] = useState(false);
 
+  // helper para sumar días (uso en el filtrado)
+  function addDays(d, n) {
+    const x = new Date(d);
+    x.setDate(x.getDate() + n);
+    return x;
+  }
+
   // --- helper: fecha efectiva para filtrar (fecha en que se agregó al sistema) ---
   function getAddedDate(r) {
     // Prioridad: creado_en -> (fallback) fecha_creacion
@@ -75,6 +82,20 @@ export default function AdminHistorial() {
 
   // Filtrado en memoria (por texto + rango de FECHA DE AGREGADO)
   const filtered = useMemo(() => {
+    // Convertimos from/to a límites locales de día completo
+    let fromDate = from ? new Date(from + "T00:00:00") : null;
+    let toDate   = to   ? new Date(to   + "T00:00:00") : null;
+
+    // Si el usuario invirtió el rango, lo corregimos
+    if (fromDate && toDate && fromDate > toDate) {
+      const tmp = fromDate;
+      fromDate = toDate;
+      toDate = tmp;
+    }
+
+    // toExclusive = (hasta + 1 día) 00:00 para comparación estricta "<"
+    const toExclusive = toDate ? addDays(toDate, 1) : null;
+
     return (rows || []).filter(r => {
       const t = (r?.titulo_pref || "").toLowerCase();
       const n = String(r?.numero_caso || "").toLowerCase();
@@ -86,8 +107,9 @@ export default function AdminHistorial() {
         who.includes(q.toLowerCase());
 
       const d = getAddedDate(r);
-      const okFrom = !from || (d && d >= new Date(from + "T00:00:00"));
-      const okTo   = !to   || (d && d <= new Date(to   + "T23:59:59"));
+      const okFrom = !fromDate || (d && d >= fromDate);
+      const okTo   = !toExclusive || (d && d <  toExclusive); // ← fin exclusivo
+
       return okText && okFrom && okTo;
     });
   }, [rows, q, from, to]);
