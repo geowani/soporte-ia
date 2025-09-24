@@ -301,7 +301,7 @@ export default function AdminAgregarCaso() {
                   inputMode="numeric"
                   pattern="[0-9]*"
                   title="7–11 dígitos. Sin consecutivos (123/321) ni 4+ repetidos (0000/1111)."
-                  placeholder="Ingrese el número de caso (7–11 dígitos)"
+                  placeholder="Ingrese el número de caso"
                   autoComplete="off"
                   maxLength={11}
                   className={ctl + (casoError ? " border-red-400 ring-red-300" : "")}
