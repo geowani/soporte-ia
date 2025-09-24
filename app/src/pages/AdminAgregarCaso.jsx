@@ -21,7 +21,9 @@ export default function AdminAgregarCaso() {
 
   const [usuarios, setUsuarios] = useState([]);
   const [usuariosLoading, setUsuariosLoading] = useState(true);
-  const [error, setError] = useState("");
+
+  const [error, setError] = useState("");      // error general del formulario
+  const [casoError, setCasoError] = useState(""); // error específico del número de caso
   const [busy, setBusy] = useState(false);
 
   // ---------- utils ----------
@@ -31,6 +33,50 @@ export default function AdminAgregarCaso() {
     "focus:outline-none focus:ring-2 focus:ring-blue-300";
 
   const onlyDigits = (s = "") => s.replace(/\D/g, "");
+
+  // ==== Validadores (mismas reglas que Sugerencias) ====
+  const isAllSameDigits = (s) => s.length > 0 && /^(\d)\1+$/.test(s);
+
+  // 4+ iguales consecutivos
+  const hasSameRun = (s, N = 4) => {
+    if (s.length < N) return false;
+    let run = 1;
+    for (let i = 1; i < s.length; i++) {
+      if (s[i] === s[i - 1]) {
+        run++;
+        if (run >= N) return true;
+      } else {
+        run = 1;
+      }
+    }
+    return false;
+  };
+
+  // 3+ consecutivos asc/desc en cualquier parte
+  const hasSequentialRun = (s, N = 3) => {
+    if (s.length < N) return false;
+    let up = 1, down = 1;
+    for (let i = 1; i < s.length; i++) {
+      const prev = s.charCodeAt(i - 1);
+      const curr = s.charCodeAt(i);
+      if (curr === prev + 1) { up++;   down = 1; }
+      else if (curr === prev - 1) { down++; up = 1; }
+      else { up = 1; down = 1; }
+      if (up >= N || down >= N) return true;
+    }
+    return false;
+  };
+
+  const validateCaso = (s) => {
+    if (!s) return "Ingresa el número de caso";
+    if (!/^\d+$/.test(s)) return "El número de caso solo puede contener dígitos (0–9)";
+    if (s.length < 7) return "El número de caso debe tener al menos 7 dígitos";
+    if (s.length > 11) return "El número de caso debe tener como máximo 11 dígitos";
+    if (isAllSameDigits(s)) return "No se permiten todos los dígitos iguales";
+    if (hasSameRun(s, 4)) return "No se permiten 4+ dígitos iguales consecutivos (ej. 0000)";
+    if (hasSequentialRun(s, 3)) return "No se permiten números consecutivos (ej. 123 o 321)";
+    return "";
+  };
 
   // ISO -> dd/MM/aaaa
   const isoToDDMMYYYY = (iso) => {
@@ -90,13 +136,19 @@ export default function AdminAgregarCaso() {
   }
 
   function handleCasoChange(e) {
-    const solo = onlyDigits(e.target.value);
+    // limpia a dígitos y corta a 11
+    const solo = onlyDigits(e.target.value).slice(0, 11);
     setForm((prev) => ({ ...prev, caso: solo }));
+    setCasoError(validateCaso(solo));
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
+
+    // valida número de caso con mismas reglas
+    const casoMsg = validateCaso(form.caso);
+    if (casoMsg) { setCasoError(casoMsg); return; }
 
     // Usuario actual (para auditoría)
     const currentUser = getCurrentUser();
@@ -105,10 +157,6 @@ export default function AdminAgregarCaso() {
       return;
     }
 
-    if (form.caso && !/^\d+$/.test(form.caso)) {
-      setError("El número de caso solo puede contener dígitos.");
-      return;
-    }
     if (!form.asunto.trim()) {
       setError("El campo 'Asunto' es obligatorio.");
       return;
@@ -185,6 +233,8 @@ export default function AdminAgregarCaso() {
   const minCierre = form.inicio || undefined; // Cierre no puede ser antes de inicio
   const maxInicio = form.cierre || undefined; // Inicio no puede ser después de cierre
 
+  const casoInvalido = !!validateCaso(form.caso);
+
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
       {/* Fondo */}
@@ -242,14 +292,24 @@ export default function AdminAgregarCaso() {
                   name="caso"
                   value={form.caso}
                   onChange={handleCasoChange}
+                  onPaste={(e) => {
+                    e.preventDefault();
+                    const clean = onlyDigits(e.clipboardData.getData("text") || "").slice(0, 11);
+                    setForm((p) => ({ ...p, caso: clean }));
+                    setCasoError(validateCaso(clean));
+                  }}
                   inputMode="numeric"
-                  pattern="\d*"
-                  title="Solo números"
-                  placeholder="Ingrese el número de caso"
+                  pattern="[0-9]*"
+                  title="7–11 dígitos. Sin consecutivos (123/321) ni 4+ repetidos (0000/1111)."
+                  placeholder="Ingrese el número de caso (7–11 dígitos)"
                   autoComplete="off"
-                  maxLength={20}
-                  className={ctl}
+                  maxLength={11}
+                  className={ctl + (casoError ? " border-red-400 ring-red-300" : "")}
+                  aria-invalid={!!casoError}
                 />
+                {casoError && (
+                  <div className="mt-2 text-sm text-red-300">{casoError}</div>
+                )}
               </div>
               <div>
                 <label className="block font-semibold text-white">Nivel</label>
@@ -374,8 +434,8 @@ export default function AdminAgregarCaso() {
 
             <button
               type="submit"
-              disabled={busy}
-              className="mt-2 mx-auto w-40 h-11 rounded-xl font-extrabold text-white bg-cyan-400 hover:bg-cyan-500 transition disabled:opacity-60"
+              disabled={busy || casoInvalido}
+              className="mt-2 mx-auto w-40 h-11 rounded-xl font-extrabold text-white bg-cyan-400 hover:bg-cyan-500 transition disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {busy ? "Enviando..." : "Enviar"}
             </button>
