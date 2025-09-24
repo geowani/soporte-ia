@@ -33,14 +33,54 @@ function getUserEmail() {
   return "";
 }
 
+// =====================
+// Helpers de validación
+// =====================
+const onlyDigits = (s) => s.replace(/[^\d]/g, "");
+const isAllSameDigits = (s) => s.length > 0 && /^(\d)\1+$/.test(s);
+
+// Secuencias 01234, 12345, 54321, 9876, etc. (longitud >= 3)
+const isSequential = (s) => {
+  if (s.length < 3) return false;
+  let asc = true, desc = true;
+  for (let i = 1; i < s.length; i++) {
+    const prev = s.charCodeAt(i - 1);
+    const curr = s.charCodeAt(i);
+    if (curr !== prev + 1) asc = false;
+    if (curr !== prev - 1) desc = false;
+    if (!asc && !desc) return false;
+  }
+  return asc || desc;
+};
+
+const validateCase = (s) => {
+  if (!s) return { ok: false, msg: "Ingresa el número de caso" };
+  if (!/^\d+$/.test(s)) return { ok: false, msg: "Solo se permiten dígitos (0-9)" };
+  if (isAllSameDigits(s)) return { ok: false, msg: "No se permiten números repetidos (ej. 00000, 11111)" };
+  if (isSequential(s)) return { ok: false, msg: "No se permiten secuencias consecutivas (ej. 12345 o 54321)" };
+  return { ok: true, msg: "" };
+};
+
 export default function Sugerencias() {
   const [caso, setCaso] = useState("");
+  const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
   const navigate = useNavigate();
 
+  const handleChange = (e) => {
+    const clean = onlyDigits(e.target.value);
+    setCaso(clean);
+    setError(validateCase(clean).msg);
+  };
+
   const onSubmit = async (e) => {
     e.preventDefault();
-    if (!caso.trim()) return alert("Ingresa el número de caso");
+
+    const { ok, msg } = validateCase(caso);
+    if (!ok) {
+      setError(msg);
+      return;
+    }
 
     const agentId = getAgentId();
     const userEmail = getUserEmail();
@@ -74,7 +114,6 @@ export default function Sugerencias() {
 
       const txt = await res.text();
 
-      // ⛔ Duplicado: backend devuelve 409 → redirigir a /ya-sugerido
       if (res.status === 409) {
         let data = {};
         try { data = txt ? JSON.parse(txt) : {}; } catch {}
@@ -84,7 +123,6 @@ export default function Sugerencias() {
           (ex.agenteEmail && ex.agenteEmail.trim())   ? ex.agenteEmail   :
           (ex.agenteId ? `ID ${ex.agenteId}` : "");
 
-        // Fallback por si refrescan
         sessionStorage.setItem("dup_case", ex.numeroCaso || payload.numeroCaso);
         if (ex.id) sessionStorage.setItem("dup_id", String(ex.id));
         if (who) sessionStorage.setItem("dup_agent", String(who));
@@ -106,7 +144,6 @@ export default function Sugerencias() {
       try { body = txt ? JSON.parse(txt) : {}; } catch {}
       const nuevoId = body?.id ?? body?.row?.id ?? null;
 
-      // Fallback si recargan confirmación
       sessionStorage.setItem("last_sug_case", payload.numeroCaso);
       if (nuevoId) sessionStorage.setItem("last_sug_id", String(nuevoId));
 
@@ -118,6 +155,8 @@ export default function Sugerencias() {
       setSending(false);
     }
   };
+
+  const invalid = !!validateCase(caso).msg;
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
@@ -148,19 +187,34 @@ export default function Sugerencias() {
               En este espacio puedes sugerir la inclusión de casos repetitivos que aún no hayan sido agregados
             </p>
 
-            <form onSubmit={onSubmit} className="flex flex-col items-center gap-4">
+            <form onSubmit={onSubmit} className="flex flex-col items-center gap-4" noValidate>
               <label className="w-full max-w-md text-xl font-semibold">Caso</label>
+
               <input
                 type="text"
                 inputMode="numeric"
+                pattern="[0-9]*"
                 className="w-full max-w-md rounded-full bg-slate-100 text-slate-900 px-4 py-3 outline-none shadow-inner shadow-black/10 focus:ring-4 ring-cyan-300 text-center tracking-widest"
                 placeholder="Número de Caso"
                 value={caso}
-                onChange={(e) => setCaso(e.target.value)}
+                onChange={handleChange}
+                onPaste={(e) => {
+                  e.preventDefault();
+                  const pasted = e.clipboardData.getData("text") || "";
+                  const clean = onlyDigits(pasted);
+                  setCaso(clean);
+                  setError(validateCase(clean).msg);
+                }}
+                autoComplete="off"
               />
+
+              {error && (
+                <div className="text-red-300 text-sm -mt-2">{error}</div>
+              )}
+
               <button
                 type="submit"
-                disabled={sending}
+                disabled={sending || invalid}
                 className="mt-2 w-40 h-11 rounded-xl font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed"
                 style={{ backgroundColor: "#59d2e6", boxShadow: "0 8px 22px rgba(89,210,230,.30)" }}
               >
