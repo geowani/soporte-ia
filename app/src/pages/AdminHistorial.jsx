@@ -18,16 +18,9 @@ export default function AdminHistorial() {
   // control de búsqueda
   const [hasSearched, setHasSearched] = useState(false);
 
-  // helper para sumar días (uso en el filtrado)
-  function addDays(d, n) {
-    const x = new Date(d);
-    x.setDate(x.getDate() + n);
-    return x;
-  }
-
-  // --- helper: fecha efectiva para filtrar (fecha en que se agregó al sistema) ---
+  // --- helpers de fecha (robustos contra zona horaria) ---
+  // Devuelve Date desde el campo más confiable devuelto por backend
   function getAddedDate(r) {
-    // Prioridad: creado_en -> (fallback) fecha_creacion
     const raw =
       r?.creado_en ??
       r?.creadoEn ??
@@ -38,11 +31,27 @@ export default function AdminHistorial() {
 
     if (!raw) return null;
 
-    // Normaliza "YYYY-MM-DD HH:mm:ss.sss" a ISO "YYYY-MM-DDTHH:mm:ss.sss"
-    const asStr = String(raw);
-    const normalized = asStr.includes("T") ? asStr : asStr.replace(" ", "T");
-    const d = new Date(normalized);
+    const asStr = String(raw).trim();
+    // Normaliza "YYYY-MM-DD HH:mm:ss" -> "YYYY-MM-DDTHH:mm:ss"
+    const norm = asStr.includes("T") ? asStr : asStr.replace(" ", "T");
+    const d = new Date(norm); // si trae "Z", será UTC; si no, local
     return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  // Convierte una fecha a clave entera YYYYMMDD (solo día, sin horas)
+  // *Si d es null -> null
+  function ymdKey(d) {
+    if (!d) return null;
+    return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+  }
+
+  // Parsea 'yyyy-mm-dd' del <input type="date"> a clave YYYYMMDD
+  function ymdKeyFromInput(s) {
+    if (!s) return null;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+    if (!m) return null;
+    const [, Y, M, D] = m;
+    return Number(Y) * 10000 + Number(M) * 100 + Number(D);
   }
 
   // fetch (solo cuando el usuario hace clic en Buscar)
@@ -80,35 +89,33 @@ export default function AdminHistorial() {
     }
   }
 
-  // Filtrado en memoria (por texto + rango de FECHA DE AGREGADO)
+  // Filtrado en memoria (por texto + rango de FECHA DE AGREGADO, por DÍA)
   const filtered = useMemo(() => {
-    // Convertimos from/to a límites locales de día completo
-    let fromDate = from ? new Date(from + "T00:00:00") : null;
-    let toDate   = to   ? new Date(to   + "T00:00:00") : null;
+    // Preparamos claves de día (YYYYMMDD) para rangos inclusivos
+    let kFrom = ymdKeyFromInput(from);
+    let kTo   = ymdKeyFromInput(to);
 
     // Si el usuario invirtió el rango, lo corregimos
-    if (fromDate && toDate && fromDate > toDate) {
-      const tmp = fromDate;
-      fromDate = toDate;
-      toDate = tmp;
+    if (kFrom && kTo && kFrom > kTo) {
+      const tmp = kFrom;
+      kFrom = kTo;
+      kTo = tmp;
     }
 
-    // toExclusive = (hasta + 1 día) 00:00 para comparación estricta "<"
-    const toExclusive = toDate ? addDays(toDate, 1) : null;
+    const qLower = (q || "").toLowerCase();
 
     return (rows || []).filter(r => {
+      // Texto
       const t = (r?.titulo_pref || "").toLowerCase();
       const n = String(r?.numero_caso || "").toLowerCase();
       const who = (r?.creado_por || "").toLowerCase();
       const okText =
-        !q ||
-        t.includes(q.toLowerCase()) ||
-        n.includes(q.toLowerCase()) ||
-        who.includes(q.toLowerCase());
+        !qLower || t.includes(qLower) || n.includes(qLower) || who.includes(qLower);
 
-      const d = getAddedDate(r);
-      const okFrom = !fromDate || (d && d >= fromDate);
-      const okTo   = !toExclusive || (d && d <  toExclusive); // ← fin exclusivo
+      // Día agregado (clave)
+      const dKey = ymdKey(getAddedDate(r));
+      const okFrom = !kFrom || (dKey !== null && dKey >= kFrom);
+      const okTo   = !kTo   || (dKey !== null && dKey <= kTo); // inclusivo
 
       return okText && okFrom && okTo;
     });
@@ -194,7 +201,6 @@ export default function AdminHistorial() {
                 <button
                   onClick={loadCases}
                   className="rounded-lg px-3 py-2 bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                  // Permite buscar si hay texto o si hay ambas fechas
                   disabled={loading || (!q && (!from || !to))}
                   title={!q && (!from || !to) ? "Escribe texto o completa ambas fechas" : "Buscar"}
                 >
