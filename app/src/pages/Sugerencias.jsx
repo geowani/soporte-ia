@@ -42,7 +42,7 @@ const onlyDigits = (s) => s.replace(/[^\d]/g, "");
 const isAllSameDigits = (s) => s.length > 0 && /^(\d)\1+$/.test(s);
 
 // Racha de N (o más) dígitos iguales consecutivos en cualquier parte
-const hasSameRun = (s, N = 3) => {
+const hasSameRun = (s, N = 4) => {
   if (s.length < N) return false;
   let run = 1;
   for (let i = 1; i < s.length; i++) {
@@ -80,9 +80,9 @@ const validateCase = (s) => {
   if (!/^\d+$/.test(s)) return { ok: false, msg: "Solo se permiten dígitos (0-9)" };
 
   // Reglas
-  if (isAllSameDigits(s))      return { ok: false, msg: "No se permiten todos los dígitos iguales" };
-  if (hasSameRun(s, 3))        return { ok: false, msg: "No se permiten 3+ dígitos iguales consecutivos (ej. 000, 111)" };
-  if (hasSequentialRun(s, 3))  return { ok: false, msg: "No se permiten números consecutivos (ej. 123, 321, 0123)" };
+  if (isAllSameDigits(s))      return { ok: false, msg: "No se permiten todos los dígitos iguales (ej. 0000)" };
+  if (hasSameRun(s, 3))        return { ok: false, msg: "No se permiten más de 4 dígitos iguales consecutivos (ej. 000)" };
+  if (hasSequentialRun(s, 3))  return { ok: false, msg: "No se permiten números consecutivos (ej. 123)" };
 
   return { ok: true, msg: "" };
 };
