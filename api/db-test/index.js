@@ -1,22 +1,39 @@
 const sql = require('mssql');
 
+function parseConnStr(connStr) {
+  const parts = {};
+  connStr.split(';').forEach(p => {
+    const [k, v] = p.split('=');
+    if (!k || !v) return;
+    parts[k.trim().toLowerCase()] = v.trim();
+  });
+  return {
+    server: (parts["server"] || "").replace("tcp:", "").split(",")[0],
+    port: parts["server"]?.includes(",") ? parseInt(parts["server"].split(",")[1]) : 1433,
+    database: parts["database"],
+    user: parts["user id"],
+    password: parts["password"],
+    options: {
+      encrypt: (parts["encrypt"] || "true").toLowerCase() === "true",
+      trustServerCertificate: (parts["trustservercertificate"] || "false").toLowerCase() === "true"
+    }
+  };
+}
+
 module.exports = async function (context, req) {
   try {
-    const cfg = { connectionString: process.env.SQL_CONN_STR, options: { encrypt: true } };
+    const raw = process.env.SQL_CONN_STR || "";
+    const cfg = parseConnStr(raw);
     const t0 = Date.now();
 
     const pool = await sql.connect(cfg);
 
-    // 1) Confirma conexión
     const v = await pool.request().query('SELECT @@VERSION AS ver');
-
-    // 2) Muestra top 3 reales de dbo.caso
     const top = await pool.request().query(`
       SELECT TOP 3 id_caso, numero_caso, asunto, fecha_creacion
       FROM dbo.caso
       ORDER BY id_caso DESC`);
 
-    // 3) Invoca tu SP con el texto de prueba
     const sp = await pool.request()
       .input('q', sql.NVarChar, 'impresora no imprime en red')
       .input('page', sql.Int, 1)
