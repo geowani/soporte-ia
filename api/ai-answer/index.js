@@ -1,4 +1,4 @@
-// api/ai-answer/index.js  (CommonJS con Gemini)
+// api/ai-answer/index.js  (CommonJS + Gemini v1 con autodetección de modelo)
 const sql = require('mssql');
 
 /* ------------------ SQL: parsear cadena ADO.NET ------------------ */
@@ -24,50 +24,93 @@ function parseConnStr(connStr = "") {
 
 const sqlConfig = parseConnStr(process.env.SQL_CONN_STR || "");
 
-/* ------------------ IA: Gemini ------------------ */
+/* ------------------ IA: Gemini (autodetecta modelo y usa API v1) ------------------ */
 async function askGemini(q) {
   const key = (process.env.GEMINI_API_KEY || "").trim();
   if (!key) return "[Gemini] Falta GEMINI_API_KEY";
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${encodeURIComponent(key)}`;
+  // 0) Lista modelos disponibles para tu key
+  let available = [];
+  try {
+    const list = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${encodeURIComponent(key)}`);
+    if (list.ok) {
+      const data = await list.json();
+      available = Array.isArray(data.models) ? data.models.map(m => m.name) : [];
+    }
+  } catch (_) { /* ignore listing errors */ }
 
-  const prompt = `Eres un asistente de soporte técnico. No hubo resultados en BD para: "${q}". 
-Responde con pasos claros, breves y accionables.`;
+  // 1) Construye candidatos (preferimos 2.5 flash → 2.5 pro → 1.5 flash → 1.5 pro)
+  const prefer = [
+    "models/gemini-2.5-flash-latest",
+    "models/gemini-2.5-flash",
+    "models/gemini-2.5-pro-latest",
+    "models/gemini-2.5-pro",
+    "models/gemini-1.5-flash-latest",
+    "models/gemini-1.5-flash",
+    "models/gemini-1.5-pro-latest",
+    "models/gemini-1.5-pro"
+  ];
+
+  const fromList = [
+    ...available.filter(n => /gemini\-2\.5.*flash/i.test(n)),
+    ...available.filter(n => /gemini\-2\.5.*pro/i.test(n)),
+    ...available.filter(n => /gemini\-1\.5.*flash/i.test(n)),
+    ...available.filter(n => /gemini\-1\.5.*pro/i.test(n)),
+  ];
+
+  const seen = new Set();
+  const candidates = [...fromList, ...prefer].filter(n => {
+    if (!n) return false;
+    if (seen.has(n)) return false;
+    seen.add(n); return true;
+  });
+
+  if (candidates.length === 0) {
+    return "[Gemini] No hay modelos disponibles para esta API key (endpoint /v1/models vacío).";
+  }
+
+  // 2) Payload
+  const prompt =
+    `Eres un asistente de soporte técnico. No hubo resultados en BD para: "${q}". ` +
+    `Responde con pasos claros, breves y accionables.`;
 
   const body = {
-    contents: [
-      {
-        role: "user",
-        parts: [{ text: prompt }]
-      }
-    ],
-    generationConfig: {
-      temperature: 0.3,
-      maxOutputTokens: 512
-    }
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0.3, maxOutputTokens: 512 }
   };
 
-  try {
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
-    });
+  // 3) Prueba candidatos hasta que uno funcione
+  let lastErr = null;
 
-    if (!resp.ok) {
-      const errText = await resp.text();
-      return `[Gemini ${resp.status}] ${errText}`;
+  for (const modelName of candidates) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1/${modelName}:generateContent?key=${encodeURIComponent(key)}`;
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+
+      if (!resp.ok) {
+        lastErr = `[Gemini ${resp.status}] ${(await resp.text()).slice(0, 800)}`;
+        // 404/400 por modelo no soportado → intenta el siguiente candidato
+        continue;
+      }
+
+      const data = await resp.json();
+      const txt =
+        data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+        (data?.candidates?.[0]?.content?.parts || []).map(p => p?.text || "").join("\n");
+
+      if (txt && txt.trim()) return txt;
+      lastErr = "[Gemini] respuesta vacía";
+    } catch (e) {
+      lastErr = `[Gemini ex] ${e?.message || e}`;
     }
-
-    const data = await resp.json();
-    const txt =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      data?.candidates?.[0]?.content?.parts?.map(p => p?.text || "").join("\n");
-
-    return (txt && txt.trim()) ? txt : "[Gemini] respuesta vacía";
-  } catch (e) {
-    return `[Gemini ex] ${e?.message || e}`;
   }
+
+  const hint = available.length ? ` Modelos detectados: ${available.slice(0,8).join(", ")}` : "";
+  return `${lastErr || "[Gemini] sin respuesta"}${hint}`;
 }
 
 /* ------------------ Handler principal ------------------ */
@@ -79,7 +122,7 @@ module.exports = async function (context, req) {
       return;
     }
 
-    // Si se pide forzar IA, saltar BD
+    // IA directa (forzar Gemini para pruebas)
     if (forceAi === true) {
       const ai = await askGemini(q);
       context.res = {
