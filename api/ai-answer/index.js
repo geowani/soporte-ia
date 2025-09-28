@@ -1,7 +1,7 @@
-// api/ai-answer/index.js  (CommonJS)
+// api/ai-answer/index.js  (CommonJS con Gemini)
 const sql = require('mssql');
 
-// --- convierte la cadena ADO.NET en config que entiende mssql ---
+/* ------------------ SQL: parsear cadena ADO.NET ------------------ */
 function parseConnStr(connStr = "") {
   const parts = {};
   connStr.split(';').forEach(p => {
@@ -24,67 +24,53 @@ function parseConnStr(connStr = "") {
 
 const sqlConfig = parseConnStr(process.env.SQL_CONN_STR || "");
 
-// --- Llamada a OpenAI con fallback robusto ---
-async function askOpenAI(q) {
-  const key = (process.env.OPENAI_API_KEY || "").trim();
-  if (!key) return "[OpenAI] Falta OPENAI_API_KEY";
+/* ------------------ IA: Gemini ------------------ */
+async function askGemini(q) {
+  const key = (process.env.GEMINI_API_KEY || "").trim();
+  if (!key) return "[Gemini] Falta GEMINI_API_KEY";
 
-  const messages = [
-    { role: "system", content: "Eres un asistente de soporte. Si hay BD respétala; si no, da pasos prácticos y claros." },
-    { role: "user", content: `No hubo resultados en BD para: "${q}". Da una guía breve y accionable.` }
-  ];
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(key)}`;
 
-  // 1) Intento con Chat Completions
-  try {
-    const r1 = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "gpt-4o-mini", temperature: 0.3, messages })
-    });
-    if (r1.ok) {
-      const d1 = await r1.json();
-      const text = d1?.choices?.[0]?.message?.content;
-      if (text && text.trim()) return text;
-    } else {
-      const errText = await r1.text();
-      console.log("OpenAI chat/completions error:", r1.status, errText);
+  const prompt = `Eres un asistente de soporte técnico. No hubo resultados en BD para: "${q}". 
+Responde con pasos claros, breves y accionables.`;
+
+  const body = {
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: prompt }]
+      }
+    ],
+    generationConfig: {
+      temperature: 0.3,
+      maxOutputTokens: 512
     }
-  } catch (e) {
-    console.log("OpenAI chat/completions exception:", e?.message || e);
-  }
+  };
 
-  // 2) Fallback: Responses API
   try {
-    const r2 = await fetch("https://api.openai.com/v1/responses", {
+    const resp = await fetch(url, {
       method: "POST",
-      headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0.3,
-        input: `Eres un asistente de soporte. No hubo resultados en BD para: "${q}". Da una guía breve y accionable.`
-      })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
     });
-    if (!r2.ok) {
-      const errText = await r2.text();
-      return `[OpenAI responses ${r2.status}] ${errText}`;
-    }
-    const d2 = await r2.json();
-    const outputText =
-      d2.output_text ||
-      (Array.isArray(d2.output)
-        ? d2.output.map(p => p?.content?.[0]?.text?.value || "").join("\n")
-        : null) ||
-      d2?.choices?.[0]?.message?.content ||
-      null;
 
-    return outputText && outputText.trim()
-      ? outputText
-      : "[OpenAI] respuesta vacía en /responses";
+    if (!resp.ok) {
+      const errText = await resp.text();
+      return `[Gemini ${resp.status}] ${errText}`;
+    }
+
+    const data = await resp.json();
+    const txt =
+      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+      data?.candidates?.[0]?.content?.parts?.map(p => p?.text || "").join("\n");
+
+    return (txt && txt.trim()) ? txt : "[Gemini] respuesta vacía";
   } catch (e) {
-    return `[OpenAI responses ex] ${e?.message || e}`;
+    return `[Gemini ex] ${e?.message || e}`;
   }
 }
 
+/* ------------------ Handler principal ------------------ */
 module.exports = async function (context, req) {
   try {
     const { q, userId, forceAi } = req.body || {};
@@ -93,24 +79,27 @@ module.exports = async function (context, req) {
       return;
     }
 
-    // Permite forzar IA para pruebas
+    // Si se pide forzar IA, saltar BD
     if (forceAi === true) {
-      const ai = await askOpenAI(q);
-      context.res = { status: 200, body: { mode: "ai", query: q, casoSugeridoId: null, answer: `(Generado con IA)\n\n${ai}` } };
+      const ai = await askGemini(q);
+      context.res = {
+        status: 200,
+        body: { mode: "ai", query: q, casoSugeridoId: null, answer: `(Generado con IA)\n\n${ai}` }
+      };
       return;
     }
 
+    /* 1) Buscar en BD */
     let resultados = [];
     let sqlError = null;
 
-    // --- 1) Buscar en la BD con tu SP sp_caso_buscar_front ---
     try {
       const pool = await sql.connect(sqlConfig);
       const r = await pool.request()
         .input("q", sql.NVarChar, q)
         .input("page", sql.Int, 1)
         .input("pageSize", sql.Int, 3)
-        .execute("dbo.sp_caso_buscar_front"); // devuelve: id, codigo, titulo, descripcion, sistema, sistema_det, fecha_creacion
+        .execute("dbo.sp_caso_buscar_front");
       resultados = r.recordset || [];
     } catch (err) {
       sqlError = String(err?.message || err);
@@ -118,7 +107,7 @@ module.exports = async function (context, req) {
       resultados = [];
     }
 
-    // --- 2) Si hay resultados, responde con BD ---
+    /* 2) Si hay resultados -> BD */
     if (resultados.length > 0) {
       const top = resultados[0];
       const bullets = resultados.map((c, i) =>
@@ -142,8 +131,8 @@ Resumen: ${top.descripcion}`
       return;
     }
 
-    // --- 3) Si no hay BD, genera con IA ---
-    const ai = await askOpenAI(q);
+    /* 3) Si no hay BD -> Gemini */
+    const ai = await askGemini(q);
     context.res = {
       status: 200,
       body: {
@@ -151,7 +140,7 @@ Resumen: ${top.descripcion}`
         query: q,
         casoSugeridoId: null,
         answer: `(Generado con IA)\n\n${ai}`,
-        sqlError // útil para diagnóstico si alguna vez falla la BD
+        sqlError
       }
     };
   } catch (e) {
