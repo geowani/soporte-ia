@@ -29,7 +29,7 @@ async function askGemini(q) {
   const key = (process.env.GEMINI_API_KEY || "").trim();
   if (!key) return "[Gemini] Falta GEMINI_API_KEY";
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(key)}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${encodeURIComponent(key)}`;
 
   const prompt = `Eres un asistente de soporte técnico. No hubo resultados en BD para: "${q}". 
 Responde con pasos claros, breves y accionables.`;
