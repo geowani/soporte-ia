@@ -24,31 +24,79 @@ function parseConnStr(connStr = "") {
 
 const sqlConfig = parseConnStr(process.env.SQL_CONN_STR || "");
 
-// --- llamada simple a OpenAI (Node 18 ya tiene fetch nativo) ---
+// --- Llamada a OpenAI con fallback robusto ---
 async function askOpenAI(q) {
-  const key = process.env.OPENAI_API_KEY || '';
-  const payload = {
-    model: 'gpt-4o-mini',
-    temperature: 0.3,
-    messages: [
-      { role: 'system', content: 'Eres un asistente de soporte. Si hay BD respétala; si no, da pasos prácticos y claros.' },
-      { role: 'user', content: `No hubo resultados en BD para: "${q}". Da una guía breve y accionable.` }
-    ]
-  };
-  const r = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  const j = await r.json();
-  return j?.choices?.[0]?.message?.content ?? '(sin respuesta del modelo)';
+  const key = (process.env.OPENAI_API_KEY || "").trim();
+  if (!key) return "[OpenAI] Falta OPENAI_API_KEY";
+
+  const messages = [
+    { role: "system", content: "Eres un asistente de soporte. Si hay BD respétala; si no, da pasos prácticos y claros." },
+    { role: "user", content: `No hubo resultados en BD para: "${q}". Da una guía breve y accionable.` }
+  ];
+
+  // 1) Intento con Chat Completions
+  try {
+    const r1 = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "gpt-4o-mini", temperature: 0.3, messages })
+    });
+    if (r1.ok) {
+      const d1 = await r1.json();
+      const text = d1?.choices?.[0]?.message?.content;
+      if (text && text.trim()) return text;
+    } else {
+      const errText = await r1.text();
+      console.log("OpenAI chat/completions error:", r1.status, errText);
+    }
+  } catch (e) {
+    console.log("OpenAI chat/completions exception:", e?.message || e);
+  }
+
+  // 2) Fallback: Responses API
+  try {
+    const r2 = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        temperature: 0.3,
+        input: `Eres un asistente de soporte. No hubo resultados en BD para: "${q}". Da una guía breve y accionable.`
+      })
+    });
+    if (!r2.ok) {
+      const errText = await r2.text();
+      return `[OpenAI responses ${r2.status}] ${errText}`;
+    }
+    const d2 = await r2.json();
+    const outputText =
+      d2.output_text ||
+      (Array.isArray(d2.output)
+        ? d2.output.map(p => p?.content?.[0]?.text?.value || "").join("\n")
+        : null) ||
+      d2?.choices?.[0]?.message?.content ||
+      null;
+
+    return outputText && outputText.trim()
+      ? outputText
+      : "[OpenAI] respuesta vacía en /responses";
+  } catch (e) {
+    return `[OpenAI responses ex] ${e?.message || e}`;
+  }
 }
 
 module.exports = async function (context, req) {
   try {
-    const { q, userId } = req.body || {};
+    const { q, userId, forceAi } = req.body || {};
     if (!q || !q.trim()) {
-      context.res = { status: 400, body: { error: 'Falta q' } };
+      context.res = { status: 400, body: { error: "Falta q" } };
+      return;
+    }
+
+    // Permite forzar IA para pruebas
+    if (forceAi === true) {
+      const ai = await askOpenAI(q);
+      context.res = { status: 200, body: { mode: "ai", query: q, casoSugeridoId: null, answer: `(Generado con IA)\n\n${ai}` } };
       return;
     }
 
@@ -59,14 +107,14 @@ module.exports = async function (context, req) {
     try {
       const pool = await sql.connect(sqlConfig);
       const r = await pool.request()
-        .input('q', sql.NVarChar, q)
-        .input('page', sql.Int, 1)
-        .input('pageSize', sql.Int, 3)
-        .execute('dbo.sp_caso_buscar_front'); // alias esperados: id, codigo, titulo, descripcion, sistema, sistema_det, fecha_creacion
+        .input("q", sql.NVarChar, q)
+        .input("page", sql.Int, 1)
+        .input("pageSize", sql.Int, 3)
+        .execute("dbo.sp_caso_buscar_front"); // devuelve: id, codigo, titulo, descripcion, sistema, sistema_det, fecha_creacion
       resultados = r.recordset || [];
     } catch (err) {
       sqlError = String(err?.message || err);
-      context.log('SQL ERROR:', sqlError);
+      context.log("SQL ERROR:", sqlError);
       resultados = [];
     }
 
@@ -74,7 +122,7 @@ module.exports = async function (context, req) {
     if (resultados.length > 0) {
       const top = resultados[0];
       const bullets = resultados.map((c, i) =>
-        `- #${i+1} ${c.codigo}: ${c.titulo} (${c.sistema || ''}/${c.sistema_det || ''})`).join('\n');
+        `- #${i + 1} ${c.codigo}: ${c.titulo} (${c.sistema || ""}/${c.sistema_det || ""})`).join("\n");
 
       context.res = {
         status: 200,
@@ -108,6 +156,6 @@ Resumen: ${top.descripcion}`
     };
   } catch (e) {
     context.log(e);
-    context.res = { status: 500, body: { error: 'Error procesando la solicitud' } };
+    context.res = { status: 500, body: { error: "Error procesando la solicitud" } };
   }
 };
