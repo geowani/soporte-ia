@@ -23,7 +23,7 @@ module.exports = async function (context, req) {
     const rs = await pool.request()
       .input("usuario_id", sql.Int, usuarioId)
       .input("texto_query", sql.NVarChar(sql.MAX), textoQuery)
-      .input("caso_sugerido_id", sql.Int, casoId)
+      .input("caso_id", sql.Int, casoId)
       .input("score_similitud", sql.Decimal(5,4), score)
       .execute("dbo.sp_busqueda_evento_registrar");
 
