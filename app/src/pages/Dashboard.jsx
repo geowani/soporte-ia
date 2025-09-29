@@ -4,6 +4,12 @@ import { useNavigate } from "react-router-dom";
 
 export default function Dashboard({ onLogout, isBlocked = false }) {
   const [q, setQ] = useState("");
+  const [forceAi, setForceAi] = useState(false);
+
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null); // { mode, query, answer, casoSugeridoId, ... }
+  const [error, setError] = useState(null);
+
   const navigate = useNavigate();
 
   // Lee un userId válido (>0). Si no, devuelve null.
@@ -43,12 +49,9 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
     if (!texto) return;
 
     try {
-      console.log("[registrarBusqueda] userId:", userId ?? "(anon)", "q:", texto);
-
       const headers = { "Content-Type": "application/json" };
       if (userId != null) headers["x-user-id"] = String(userId);
 
-      // arma el body sin forzar 0 ni undefined
       const body = { q: texto };
       if (casoId != null) body.casoId = casoId;
       if (score != null) body.score = score;
@@ -67,33 +70,105 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
     }
   }
 
-  // Ejecuta la búsqueda: registra y luego navega
-  const search = useCallback(async () => {
+  // Llama a la IA/BD y muestra resultado debajo del buscador
+  const ejecutarBusqueda = useCallback(async () => {
     const term = q.trim();
     if (!term) {
       alert("Por favor ingresa un término para buscar");
       return;
     }
 
-    // 1) registra y espera (evita cancelar el fetch)
-    await registrarBusqueda(term);
+    setLoading(true);
+    setError(null);
+    setResult(null);
 
-    // 2) navega a resultados
-    navigate(`/resultados?q=${encodeURIComponent(term)}`);
-  }, [q, navigate]);
+    try {
+      const userId = getUserId() ?? 0;
+      const res = await fetch("/api/ai-answer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ q: term, userId, forceAi }),
+      });
 
-  // ESC cierra sesión / ENTER busca
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Error en la API");
+      }
+
+      setResult(data);
+
+      // registra la búsqueda (si tienes SP para logging)
+      await registrarBusqueda(term, {
+        casoId: data?.casoSugeridoId ?? null,
+        score: data?.mode === "db" ? 1.0 : null,
+      });
+    } catch (e) {
+      setError(e?.message || "Error realizando la búsqueda");
+    } finally {
+      setLoading(false);
+    }
+  }, [q, forceAi]);
+
+  // ENTER para buscar / ESC para salir
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "Escape") handleLogout();
       if (e.key === "Enter") {
         e.preventDefault();
-        search();
+        ejecutarBusqueda();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [handleLogout, search]);
+  }, [handleLogout, ejecutarBusqueda]);
+
+  // Render helpers
+  function Badge({ mode }) {
+    const isDb = mode === "db";
+    const color = isDb ? "bg-emerald-500" : "bg-indigo-500";
+    const label = isDb ? "Base de datos" : "IA (Gemini)";
+    return (
+      <span className={`inline-block px-3 py-1 rounded-full text-white text-xs font-bold ${color}`}>
+        {label}
+      </span>
+    );
+  }
+
+  function AnswerBlock({ data }) {
+    if (!data) return null;
+    const { mode, answer, casoSugeridoId } = data;
+
+    return (
+      <div className="mt-6 w-full max-w-2xl mx-auto rounded-xl bg-white/90 text-slate-900 p-5 shadow-[0_12px_40px_rgba(0,0,0,.30)]">
+        <div className="flex items-center justify-between gap-3">
+          <Badge mode={mode} />
+          {mode === "db" && !!casoSugeridoId && (
+            <button
+              onClick={() => navigate(`/caso/${casoSugeridoId}`)}
+              className="px-3 py-1.5 rounded-md bg-slate-800 text-white text-sm font-semibold hover:bg-slate-900"
+              title="Ver detalle del caso sugerido"
+            >
+              Ver detalle
+            </button>
+          )}
+        </div>
+
+        <div className="mt-4 whitespace-pre-wrap leading-relaxed">
+          {answer}
+        </div>
+
+        <div className="mt-4 flex items-center justify-end gap-3">
+          <button
+            onClick={() => navigate(`/resultados?q=${encodeURIComponent(q)}`)}
+            className="px-3 py-1.5 rounded-md bg-slate-700 text-white text-sm hover:bg-slate-800"
+            title="Ver más resultados"
+          >
+            Ver más
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
@@ -155,7 +230,7 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
                 aria-label="Barra de búsqueda"
               />
               <button
-                onClick={search}
+                onClick={ejecutarBusqueda}
                 className="m-1 h-10 w-10 rounded-full grid place-items-center bg-slate-300/80 hover:scale-105 transition"
                 aria-label="Buscar"
                 title="Buscar"
@@ -165,7 +240,44 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
                 </svg>
               </button>
             </div>
+
+            {/* Controles extra */}
+            <div className="flex items-center justify-center gap-4 mt-3 text-sm">
+              <label className="inline-flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={forceAi}
+                  onChange={(e) => setForceAi(e.target.checked)}
+                />
+                <span>Forzar IA (Gemini)</span>
+              </label>
+
+              <button
+                onClick={() => navigate(`/resultados?q=${encodeURIComponent(q.trim())}`)}
+                className="px-3 py-1.5 rounded-md bg-slate-700 text-white hover:bg-slate-800"
+                title="Abrir vista de resultados"
+              >
+                Abrir Resultados
+              </button>
+            </div>
           </div>
+
+          {/* Estado de red */}
+          <div className="mt-6">
+            {loading && (
+              <div className="text-sm text-white/90 animate-pulse">
+                Consultando {forceAi ? "IA (Gemini)" : "BD…"} por “{q.trim()}”
+              </div>
+            )}
+            {error && (
+              <div className="text-sm text-red-200">
+                {error}
+              </div>
+            )}
+          </div>
+
+          {/* Resultado */}
+          <AnswerBlock data={result} />
 
           {/* Botón Sugerencias */}
           <div className="mt-12">
