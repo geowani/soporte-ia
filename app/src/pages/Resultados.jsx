@@ -58,26 +58,54 @@ export default function Resultados() {
   // Mantén input sincronizado si cambia la URL
   useEffect(() => { setQ(urlQ); }, [urlQ]);
 
-  // Limpia/normaliza markdown básico para mostrar texto plano
+  // Limpia/normaliza markdown y respeta listas numeradas / viñetas con separación visual
   function cleanMarkdown(s) {
     if (!s) return "";
-    return String(s)
-      // elimina bloques ``` ```
+
+    // 1) Limpiar formatos de markdown
+    let t = String(s)
+      // Bloques ``` ```
       .replace(/```[\s\S]*?```/g, (m) => m.replace(/```/g, ""))
-      // inline code `
+      // Inline code `
       .replace(/`([^`]+)`/g, "$1")
-      // **negritas** y __negritas__
+      // **negritas** / __negritas__
       .replace(/\*\*(.*?)\*\*/g, "$1")
       .replace(/__(.*?)__/g, "$1")
       // _itálicas_
       .replace(/_(.*?)_/g, "$1")
       // # títulos
-      .replace(/^#{1,6}\s*/gm, "")
-      // viñetas - y * -> •
-      .replace(/^\s*[-*]\s+/gm, "• ")
-      // reduce líneas en blanco múltiples
+      .replace(/^#{1,6}\s*/gm, "");
+
+    // 2) Normalizar listas y añadir separación entre ítems
+    const lines = t.split(/\r?\n/);
+    const out = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      let L = lines[i].trimEnd();
+
+      // ¿Lista numerada? "1. " o "1) "
+      const isNumbered = /^\s*\d+[\.\)]\s+/.test(L);
+
+      // ¿Viñeta? -, *, • al inicio => convertir a "- "
+      const isBullet = /^\s*[-*•]\s+/.test(L);
+      if (isBullet) {
+        L = L.replace(/^\s*[-*•]\s+/, "- ");
+      }
+
+      // Si es un ítem (numerado o viñeta), inserta línea en blanco antes (si procede)
+      if ((isNumbered || isBullet) && out.length && out[out.length - 1] !== "") {
+        out.push("");
+      }
+
+      out.push(L);
+    }
+
+    // 3) Compactar saltos de línea excesivos
+    t = out.join("\n")
       .replace(/\n{3,}/g, "\n\n")
       .trim();
+
+    return t;
   }
 
   // Ejecuta búsqueda integral (AI + listado BD si aplica)
