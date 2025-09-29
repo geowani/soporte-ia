@@ -240,26 +240,6 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
                 </svg>
               </button>
             </div>
-
-            {/* Controles extra */}
-            <div className="flex items-center justify-center gap-4 mt-3 text-sm">
-              <label className="inline-flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={forceAi}
-                  onChange={(e) => setForceAi(e.target.checked)}
-                />
-                <span>Forzar IA (Gemini)</span>
-              </label>
-
-              <button
-                onClick={() => navigate(`/resultados?q=${encodeURIComponent(q.trim())}`)}
-                className="px-3 py-1.5 rounded-md bg-slate-700 text-white hover:bg-slate-800"
-                title="Abrir vista de resultados"
-              >
-                Abrir Resultados
-              </button>
-            </div>
           </div>
 
           {/* Estado de red */}
