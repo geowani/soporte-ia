@@ -11,9 +11,12 @@ export default function Resultados() {
   const urlQ = new URLSearchParams(location.search).get("q") || "";
   const [q, setQ] = useState(urlQ);
 
-  // Datos de la API
-  const [items, setItems] = useState([]);
+  // Estados principales
+  const [result, setResult] = useState(null); // { mode, answer, casoSugeridoId, ... }
+  const [items, setItems] = useState([]);     // lista cuando hay BD
   const [total, setTotal] = useState(0);
+
+  const [forceAi, setForceAi] = useState(false); // útil para pruebas
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -56,48 +59,70 @@ export default function Resultados() {
   // Mantén input sincronizado si cambia la URL
   useEffect(() => { setQ(urlQ); }, [urlQ]);
 
-  // Carga resultados cuando cambia ?q= y REGISTRA si aún no está registrado ese término
-  useEffect(() => {
-    const term = urlQ.trim();
-    let abort = false;
+  // Ejecuta búsqueda integral (AI + listado BD si aplica)
+  const runSearch = useCallback(async (term) => {
+    const texto = String(term ?? "").trim();
+    if (!texto) {
+      setResult(null);
+      setItems([]);
+      setTotal(0);
+      setError("");
+      return;
+    }
 
-    (async () => {
-      if (!term) {
+    setLoading(true);
+    setError("");
+    setResult(null);
+    setItems([]);
+    setTotal(0);
+
+    try {
+      // registra si aún no se ha registrado este término
+      if (lastRegisteredRef.current !== texto) {
+        await registrarBusqueda(texto);
+        lastRegisteredRef.current = texto;
+      }
+
+      // 1) Consulta unificada (BD o IA)
+      const res = await fetch("/api/ai-answer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          q: texto,
+          userId: getUserId() ?? 0,
+          forceAi, // si quieres forzar IA desde la vista
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Error en la búsqueda");
+      setResult(data);
+
+      // 2) Si vino de BD, muestra la lista detallada como antes
+      if (data?.mode === "db") {
+        const r = await buscarCasos({ q: texto, page: 1, pageSize: 20 });
+        const arr = r.items || [];
+        setItems(arr);
+        setTotal(r.total ?? arr.length);
+      } else {
+        // IA → lista vacía (mostramos solo la respuesta IA)
         setItems([]);
         setTotal(0);
-        setError("");
-        return;
       }
+    } catch (e) {
+      setError(e?.message || "Error al buscar casos");
+      setResult(null);
+      setItems([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
+    }
+  }, [forceAi]);
 
-      try {
-        setLoading(true);
-        setError("");
-
-        // Si este término aún no ha sido registrado (p.ej. vienes desde Dashboard), regístralo aquí
-        if (lastRegisteredRef.current !== term) {
-          await registrarBusqueda(term);
-          lastRegisteredRef.current = term; // marca como registrado
-        }
-
-        const res = await buscarCasos({ q: term, page: 1, pageSize: 20 });
-        if (!abort) {
-          const arr = res.items || [];
-          setItems(arr);
-          setTotal(res.total ?? arr.length);
-        }
-      } catch (e) {
-        if (!abort) {
-          setItems([]);
-          setTotal(0);
-          setError(e?.message || "Error al buscar casos");
-        }
-      } finally {
-        if (!abort) setLoading(false);
-      }
-    })();
-
-    return () => { abort = true; };
-  }, [urlQ]);
+  // Carga resultados cuando cambia ?q=
+  useEffect(() => {
+    runSearch(urlQ);
+  }, [urlQ, runSearch]);
 
   // Submit de búsqueda desde esta página:
   // Registra si el término cambió; luego actualiza la URL (lo que recarga resultados).
@@ -118,9 +143,22 @@ export default function Resultados() {
     if (!q.trim()) return "Escribe un término para buscar.";
     if (loading) return "";
     if (error) return "";
+    if (result?.mode === "ai") return ""; // hay respuesta IA
     if ((items?.length || 0) === 0) return `Sin coincidencias para “${q}”.`;
     return "";
-  }, [q, loading, error, items]);
+  }, [q, loading, error, items, result]);
+
+  function Badge({ mode }) {
+    if (!mode) return null;
+    const isDb = mode === "db";
+    const color = isDb ? "bg-emerald-500" : "bg-indigo-500";
+    const label = isDb ? "Base de datos" : "IA (Gemini)";
+    return (
+      <span className={`inline-block px-3 py-1 rounded-full text-white text-xs font-bold ${color}`}>
+        {label}
+      </span>
+    );
+  }
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
@@ -149,7 +187,6 @@ export default function Resultados() {
       </div>
 
       {/* Contenido */}
-      {/* 👇 corregido: 'flex-direction-col' -> 'flex-col' */}
       <div className="mt-6 px-4 w-full flex flex-col items-center">
         {/* Buscador */}
         <div className="w-full max-w-3xl flex items-center rounded-full bg-white/85 text-slate-900 overflow-hidden shadow-inner shadow-black/10">
@@ -179,6 +216,17 @@ export default function Resultados() {
           </button>
         </div>
 
+        <div className="flex items-center gap-4 mt-3 text-sm">
+          <label className="inline-flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={forceAi}
+              onChange={(e) => setForceAi(e.target.checked)}
+            />
+            <span>Forzar IA (Gemini)</span>
+          </label>
+        </div>
+
         {/* Resultados */}
         <div className="mt-5 w-full max-w-4xl rounded-2xl bg-slate-200/85 text-slate-900 p-5 md:p-6 border border-white/20 shadow-[0_20px_60px_rgba(0,0,0,.35)]">
           <div className="flex items-center justify-between mb-3">
@@ -204,7 +252,29 @@ export default function Resultados() {
             <div className="text-slate-700 animate-pulse">Buscando…</div>
           )}
 
-          {!loading && !error && items?.length > 0 && (
+          {/* Bloque de respuesta (IA o BD - texto formateado) */}
+          {!loading && !error && result?.mode && (
+            <div className="mb-4">
+              <div className="mb-2">
+                <Badge mode={result.mode} />
+              </div>
+              <div className="whitespace-pre-wrap leading-relaxed">{result.answer}</div>
+
+              {result.mode === "db" && !!result.casoSugeridoId && (
+                <div className="mt-3">
+                  <button
+                    className="px-3 py-1.5 rounded-md bg-slate-800 text-white text-sm hover:bg-slate-900"
+                    onClick={() => navigate(`/caso/${result.casoSugeridoId}`)}
+                  >
+                    Ver detalle del caso
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Lista detallada desde SP (solo cuando hubo BD) */}
+          {!loading && !error && result?.mode === "db" && items?.length > 0 && (
             <div className="max-h-[60vh] overflow-y-auto pr-2">
               {items.map((c, i) => {
                 // Campos desde el SP: id_caso, numero_caso, asunto, descripcion, departamento
@@ -217,7 +287,6 @@ export default function Resultados() {
                 return (
                   <div key={`${idCaso}-${i}`} className="py-3">
                     <div className="flex items-start justify-between">
-                      {/* Navega al detalle con el id del caso y pasa el row completo */}
                       <button
                         onClick={() =>
                           navigate(`/caso/${idCaso}`, { state: { fromQ: q, row: c } })
