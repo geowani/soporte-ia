@@ -24,7 +24,7 @@ function parseConnStr(connStr = "") {
 
 const sqlConfig = parseConnStr(process.env.SQL_CONN_STR || "");
 
-/* ------------------ IA: Gemini (autodetecta modelo y usa API v1) ------------------ */
+/* ------------------ IA: Gemini (3 alternativas concisas, API v1 con autodetección) ------------------ */
 async function askGemini(q) {
   const key = (process.env.GEMINI_API_KEY || "").trim();
   if (!key) return "[Gemini] Falta GEMINI_API_KEY";
@@ -69,17 +69,42 @@ async function askGemini(q) {
     return "[Gemini] No hay modelos disponibles para esta API key (endpoint /v1/models vacío).";
   }
 
-  // 2) Payload
-  const prompt = `Eres un asistente de soporte técnico. 
-No hubo resultados en BD para: "${q}". 
+  // 2) Prompt para EXACTAMENTE 3 alternativas concisas
+  const prompt = `Eres un asistente de soporte técnico.
+No hubo resultados en la base de datos para: "${q}".
 Responde con pasos claros, breves y accionables, en formato de lista numerada o viñetas.
 No incluyas frases de cierre como "háznoslo saber", "contáctame", "puedo ayudarte más" ni invitaciones a interacción humana. 
-Entrega solo la solución técnica y concreta.`;
 
+DEVUELVE EXACTAMENTE 3 ALTERNATIVAS numeradas del 1 al 3.
+Para cada alternativa:
+- Escribe un TÍTULO corto en UNA LÍNEA (sin adornos).
+- Debajo, 3 a 5 PASOS prácticos en viñetas ("- ").
+- No uses textos de cierre, disculpas ni invitaciones a interacción humana.
+- No agregues nada fuera de esas tres alternativas.
+- Responde en español.
+
+FORMATO ESTRICTO:
+1) <título corto>
+- paso 1
+- paso 2
+- paso 3
+
+2) <título corto>
+- paso 1
+- paso 2
+- paso 3
+
+3) <título corto>
+- paso 1
+- paso 2
+- paso 3`;
 
   const body = {
     contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0.3, maxOutputTokens: 512 }
+    generationConfig: {
+      temperature: 0.2,      // más conciso/estable
+      maxOutputTokens: 600   // suficiente para 3 alternativas compactas
+    }
   };
 
   // 3) Prueba candidatos hasta que uno funcione
@@ -130,7 +155,7 @@ module.exports = async function (context, req) {
       const ai = await askGemini(q);
       context.res = {
         status: 200,
-        body: { mode: "ai", query: q, casoSugeridoId: null, answer: `(Generado con IA)\n\n${ai}` }
+        body: { mode: "ai", query: q, casoSugeridoId: null, answer: `Respuesta generada con inteligencia artificial:\n\n${ai}` }
       };
       return;
     }
