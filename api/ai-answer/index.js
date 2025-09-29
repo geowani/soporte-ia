@@ -182,7 +182,7 @@ Resumen: ${top.descripcion}`
         mode: "ai",
         query: q,
         casoSugeridoId: null,
-        answer: `(Generado con IA)\n\n${ai}`,
+        answer: `(Respuesta generada con inteligencia artificial)\n\n${ai}`,
         sqlError
       }
     };
