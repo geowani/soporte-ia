@@ -58,6 +58,28 @@ export default function Resultados() {
   // Mantén input sincronizado si cambia la URL
   useEffect(() => { setQ(urlQ); }, [urlQ]);
 
+  // Limpia/normaliza markdown básico para mostrar texto plano
+  function cleanMarkdown(s) {
+    if (!s) return "";
+    return String(s)
+      // elimina bloques ``` ```
+      .replace(/```[\s\S]*?```/g, (m) => m.replace(/```/g, ""))
+      // inline code `
+      .replace(/`([^`]+)`/g, "$1")
+      // **negritas** y __negritas__
+      .replace(/\*\*(.*?)\*\*/g, "$1")
+      .replace(/__(.*?)__/g, "$1")
+      // _itálicas_
+      .replace(/_(.*?)_/g, "$1")
+      // # títulos
+      .replace(/^#{1,6}\s*/gm, "")
+      // viñetas - y * -> •
+      .replace(/^\s*[-*]\s+/gm, "• ")
+      // reduce líneas en blanco múltiples
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
   // Ejecuta búsqueda integral (AI + listado BD si aplica)
   const runSearch = useCallback(async (term) => {
     const texto = String(term ?? "").trim();
@@ -145,18 +167,6 @@ export default function Resultados() {
     return "";
   }, [q, loading, error, items, result]);
 
-  function Badge({ mode }) {
-    if (!mode) return null;
-    const isDb = mode === "db";
-    const color = isDb ? "bg-emerald-500" : "bg-indigo-500";
-    const label = isDb ? "Base de datos" : "IA (Gemini)";
-    return (
-      <span className={`inline-block px-3 py-1 rounded-full text-white text-xs font-bold ${color}`}>
-        {label}
-      </span>
-    );
-  }
-
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
       {/* Fondo */}
@@ -238,13 +248,12 @@ export default function Resultados() {
             <div className="text-slate-700 animate-pulse">Buscando…</div>
           )}
 
-          {/* Bloque de respuesta (IA o BD - texto formateado) */}
+          {/* Bloque de respuesta (IA o BD) sin markdown y SIN badge */}
           {!loading && !error && result?.mode && (
             <div className="mb-4">
-              <div className="mb-2">
-                <Badge mode={result.mode} />
+              <div className="whitespace-pre-wrap leading-relaxed">
+                {cleanMarkdown(result.answer)}
               </div>
-              <div className="whitespace-pre-wrap leading-relaxed">{result.answer}</div>
 
               {result.mode === "db" && !!result.casoSugeridoId && (
                 <div className="mt-3">
