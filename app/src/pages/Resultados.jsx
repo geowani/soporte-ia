@@ -16,7 +16,6 @@ export default function Resultados() {
   const [items, setItems] = useState([]);     // lista cuando hay BD
   const [total, setTotal] = useState(0);
 
-  const [forceAi, setForceAi] = useState(false); // útil para pruebas
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -90,7 +89,6 @@ export default function Resultados() {
         body: JSON.stringify({
           q: texto,
           userId: getUserId() ?? 0,
-          forceAi, // si quieres forzar IA desde la vista
         }),
       });
 
@@ -117,7 +115,7 @@ export default function Resultados() {
     } finally {
       setLoading(false);
     }
-  }, [forceAi]);
+  }, []);
 
   // Carga resultados cuando cambia ?q=
   useEffect(() => {
@@ -125,7 +123,6 @@ export default function Resultados() {
   }, [urlQ, runSearch]);
 
   // Submit de búsqueda desde esta página:
-  // Registra si el término cambió; luego actualiza la URL (lo que recarga resultados).
   const doSearch = useCallback(async () => {
     const term = q.trim();
     if (!term) return;
@@ -216,17 +213,6 @@ export default function Resultados() {
           </button>
         </div>
 
-        <div className="flex items-center gap-4 mt-3 text-sm">
-          <label className="inline-flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={forceAi}
-              onChange={(e) => setForceAi(e.target.checked)}
-            />
-            <span>Forzar IA (Gemini)</span>
-          </label>
-        </div>
-
         {/* Resultados */}
         <div className="mt-5 w-full max-w-4xl rounded-2xl bg-slate-200/85 text-slate-900 p-5 md:p-6 border border-white/20 shadow-[0_20px_60px_rgba(0,0,0,.35)]">
           <div className="flex items-center justify-between mb-3">
@@ -277,7 +263,6 @@ export default function Resultados() {
           {!loading && !error && result?.mode === "db" && items?.length > 0 && (
             <div className="max-h-[60vh] overflow-y-auto pr-2">
               {items.map((c, i) => {
-                // Campos desde el SP: id_caso, numero_caso, asunto, descripcion, departamento
                 const idCaso = c.id_caso ?? c.id ?? c.numero_caso ?? 0;
                 const numero = c.numero_caso ?? "";
                 const area = c.departamento ?? "";
