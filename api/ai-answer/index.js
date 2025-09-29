@@ -70,9 +70,12 @@ async function askGemini(q) {
   }
 
   // 2) Payload
-  const prompt =
-    `Eres un asistente de soporte técnico. No hubo resultados en BD para: "${q}". ` +
-    `Responde con pasos claros, breves y accionables.`;
+  const prompt = `Eres un asistente de soporte técnico. 
+No hubo resultados en BD para: "${q}". 
+Responde con pasos claros, breves y accionables, en formato de lista numerada o viñetas.
+No incluyas frases de cierre como "háznoslo saber", "contáctame", "puedo ayudarte más" ni invitaciones a interacción humana. 
+Entrega solo la solución técnica y concreta.`;
+
 
   const body = {
     contents: [{ role: "user", parts: [{ text: prompt }] }],
