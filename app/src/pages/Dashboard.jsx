@@ -13,18 +13,19 @@ export default function Dashboard({ onLogout }) {
     return Number.isFinite(id) && id > 0 ? id : null;
   }
 
-  // --- nombre de usuario (desde localStorage) ---
-  // Ajusta la clave si tu login guarda otro nombre (p.ej. "nombre" o "fullName")
+  // --- nombre de usuario (prioriza la misma clave que usas en SugerenciaExiste) ---
   const nombreUsuario =
-    localStorage.getItem("nombreUsuario") ||
-    localStorage.getItem("nombre") ||
-    "Usuario";
+    sessionStorage.getItem("dup_agent") ||      // <- primero (como en SugerenciaExiste.jsx)
+    localStorage.getItem("nombreUsuario") ||    // fallback si existe en localStorage
+    localStorage.getItem("nombre") ||           // otro fallback posible
+    "Usuario";                                  // default
 
   // --- cierre de sesión ---
   const handleLogout = useCallback(() => {
     localStorage.removeItem("userId");
     localStorage.removeItem("nombreUsuario");
     localStorage.removeItem("nombre");
+    sessionStorage.removeItem("dup_agent");     // <- limpia también el agente
     onLogout?.();
   }, [onLogout]);
 
