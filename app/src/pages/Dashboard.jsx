@@ -242,20 +242,6 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
             </div>
           </div>
 
-          {/* Estado de red */}
-          <div className="mt-6">
-            {loading && (
-              <div className="text-sm text-white/90 animate-pulse">
-                Consultando {forceAi ? "IA (Gemini)" : "BD…"} por “{q.trim()}”
-              </div>
-            )}
-            {error && (
-              <div className="text-sm text-red-200">
-                {error}
-              </div>
-            )}
-          </div>
-
           {/* Resultado */}
           <AnswerBlock data={result} />
 
