@@ -4,6 +4,12 @@ import { useNavigate } from "react-router-dom";
 
 export default function Dashboard({ onLogout }) {
   const [q, setQ] = useState("");
+  const [displayName, setDisplayName] = useState(
+    sessionStorage.getItem("dup_agent") ||
+      localStorage.getItem("nombreUsuario") ||
+      localStorage.getItem("nombre") ||
+      "Usuario"
+  );
   const navigate = useNavigate();
 
   // --- obtiene userId ---
@@ -13,19 +19,50 @@ export default function Dashboard({ onLogout }) {
     return Number.isFinite(id) && id > 0 ? id : null;
   }
 
-  // --- nombre de usuario (prioriza la misma clave que usas en SugerenciaExiste) ---
-  const nombreUsuario =
-    sessionStorage.getItem("dup_agent") ||      // <- primero (como en SugerenciaExiste.jsx)
-    localStorage.getItem("nombreUsuario") ||    // fallback si existe en localStorage
-    localStorage.getItem("nombre") ||           // otro fallback posible
-    "Usuario";                                  // default
+  // --- intenta resolver el nombre desde backend si hace falta ---
+  useEffect(() => {
+    // Si ya tenemos un nombre real (no "Usuario"), no llames al backend
+    if (displayName && displayName !== "Usuario") return;
+
+    const userId = getUserId();
+    if (!userId) return;
+
+    // Intenta obtener el perfil del usuario
+    (async () => {
+      try {
+        // Ajusta esta ruta si tu API usa otra (p. ej.: /api/usuarios/{id}, /api/user/{id})
+        const resp = await fetch(`/api/usuario/${userId}`, { method: "GET" });
+        if (!resp.ok) return;
+
+        const data = await resp.json();
+
+        // Normaliza posibles nombres de propiedad
+        const nombre =
+          data?.nombre_completo ||
+          data?.nombre ||
+          data?.fullName ||
+          data?.agente_nombre ||
+          data?.agente ||
+          null;
+
+        if (nombre) {
+          setDisplayName(nombre);
+          // deja cacheado para próximas vistas
+          sessionStorage.setItem("dup_agent", nombre);
+          localStorage.setItem("nombreUsuario", nombre);
+        }
+      } catch {
+        // Silencioso: si falla, se queda "Usuario"
+      }
+    })();
+  }, [displayName]);
 
   // --- cierre de sesión ---
   const handleLogout = useCallback(() => {
     localStorage.removeItem("userId");
     localStorage.removeItem("nombreUsuario");
     localStorage.removeItem("nombre");
-    sessionStorage.removeItem("dup_agent");     // <- limpia también el agente
+    sessionStorage.removeItem("dup_agent");
     onLogout?.();
   }, [onLogout]);
 
@@ -117,7 +154,7 @@ export default function Dashboard({ onLogout }) {
         aria-live="polite"
       >
         <span className="text-sm opacity-90">👋 Bienvenido,</span>{" "}
-        <strong className="font-semibold">{nombreUsuario}</strong>
+        <strong className="font-semibold">{displayName}</strong>
       </div>
 
       {/* Botón salir */}
