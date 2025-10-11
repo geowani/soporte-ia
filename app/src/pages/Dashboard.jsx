@@ -4,69 +4,126 @@ import { useNavigate } from "react-router-dom";
 
 export default function Dashboard({ onLogout }) {
   const [q, setQ] = useState("");
-  const [displayName, setDisplayName] = useState(
-    sessionStorage.getItem("dup_agent") ||
-      localStorage.getItem("nombreUsuario") ||
-      localStorage.getItem("nombre") ||
-      "Usuario"
-  );
+  const [displayName, setDisplayName] = useState(getInitialName());
   const navigate = useNavigate();
 
-  // --- obtiene userId ---
+  // -------- helpers --------
   function getUserId() {
     const raw = localStorage.getItem("userId");
     const id = Number(raw);
     return Number.isFinite(id) && id > 0 ? id : null;
   }
 
-  // --- intenta resolver el nombre desde backend si hace falta ---
-  useEffect(() => {
-    // Si ya tenemos un nombre real (no "Usuario"), no llames al backend
+  function getInitialName() {
+    // 1) Prioriza lo que ya exista
+    const s =
+      sessionStorage.getItem("dup_agent") ||
+      localStorage.getItem("nombreUsuario") ||
+      localStorage.getItem("nombre");
+    if (s && s.trim()) return s.trim();
+
+    // 2) Intenta sacar del JWT si existe
+    const jwtName = getNameFromJWT();
+    if (jwtName) return jwtName;
+
+    return "Usuario";
+  }
+
+  function getNameFromJWT() {
+    // Busca tokens comunes
+    const token =
+      localStorage.getItem("token") ||
+      localStorage.getItem("access_token") ||
+      sessionStorage.getItem("token") ||
+      sessionStorage.getItem("access_token");
+    if (!token || token.split(".").length !== 3) return null;
+
+    try {
+      const payload = JSON.parse(
+        atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))
+      );
+      const name =
+        payload?.name ||
+        payload?.given_name ||
+        payload?.preferred_username ||
+        payload?.unique_name ||
+        payload?.email ||
+        null;
+      return name || null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function resolveNameFromAPI() {
+    // 3) Si seguimos con "Usuario", intenta pedirlo al backend
     if (displayName && displayName !== "Usuario") return;
 
     const userId = getUserId();
-    if (!userId) return;
+    const headers = { "Content-Type": "application/json" };
 
-    // Intenta obtener el perfil del usuario
-    (async () => {
+    // Si tienes JWT, envíalo
+    const bearer =
+      localStorage.getItem("token") ||
+      localStorage.getItem("access_token") ||
+      sessionStorage.getItem("token") ||
+      sessionStorage.getItem("access_token");
+    if (bearer) headers["Authorization"] = `Bearer ${bearer}`;
+
+    if (userId != null) headers["x-user-id"] = String(userId);
+
+    const candidates = [
+      userId != null ? `/api/usuario/${userId}` : null,
+      userId != null ? `/api/usuarios/${userId}` : null,
+      `/api/whoami`,
+    ].filter(Boolean);
+
+    for (const url of candidates) {
       try {
-        // Ajusta esta ruta si tu API usa otra (p. ej.: /api/usuarios/{id}, /api/user/{id})
-        const resp = await fetch(`/api/usuario/${userId}`, { method: "GET" });
-        if (!resp.ok) return;
-
-        const data = await resp.json();
-
-        // Normaliza posibles nombres de propiedad
-        const nombre =
+        const r = await fetch(url, { headers });
+        if (!r.ok) continue;
+        const data = await r.json();
+        const name =
           data?.nombre_completo ||
           data?.nombre ||
           data?.fullName ||
-          data?.agente_nombre ||
           data?.agente ||
+          data?.username ||
+          data?.email ||
           null;
-
-        if (nombre) {
-          setDisplayName(nombre);
-          // deja cacheado para próximas vistas
-          sessionStorage.setItem("dup_agent", nombre);
-          localStorage.setItem("nombreUsuario", nombre);
+        if (name && String(name).trim()) {
+          const clean = String(name).trim();
+          setDisplayName(clean);
+          sessionStorage.setItem("dup_agent", clean);
+          localStorage.setItem("nombreUsuario", clean);
+          return;
         }
       } catch {
-        // Silencioso: si falla, se queda "Usuario"
+        // intenta la siguiente ruta
       }
-    })();
+    }
+  }
+
+  // -------- efectos --------
+  useEffect(() => {
+    // si aún no tenemos nombre real, intenta resolver desde API/JWT
+    if (!displayName || displayName === "Usuario") {
+      resolveNameFromAPI();
+    }
   }, [displayName]);
 
-  // --- cierre de sesión ---
+  // -------- logout --------
   const handleLogout = useCallback(() => {
     localStorage.removeItem("userId");
     localStorage.removeItem("nombreUsuario");
     localStorage.removeItem("nombre");
     sessionStorage.removeItem("dup_agent");
+    // opcional: limpiar tokens si aplica
+    // localStorage.removeItem("token"); localStorage.removeItem("access_token");
     onLogout?.();
   }, [onLogout]);
 
-  // --- registra búsqueda (sin bloquear) ---
+  // -------- registrar búsqueda --------
   async function registrarBusqueda(term) {
     const userId = getUserId();
     const texto = String(term ?? "").trim();
@@ -75,10 +132,8 @@ export default function Dashboard({ onLogout }) {
     try {
       const headers = { "Content-Type": "application/json" };
       if (userId != null) headers["x-user-id"] = String(userId);
-
       const body = { q: texto, usuarioId: userId ?? null };
 
-      // sin await -> se ejecuta en segundo plano
       fetch("/api/busqueda-evento-registrar", {
         method: "POST",
         headers,
@@ -87,19 +142,18 @@ export default function Dashboard({ onLogout }) {
     } catch {}
   }
 
-  // --- búsqueda principal ---
+  // -------- búsqueda principal --------
   const ejecutarBusqueda = useCallback(() => {
     const term = q.trim();
     if (!term) {
       alert("Por favor ingresa un término para buscar");
       return;
     }
-
     registrarBusqueda(term);
     navigate(`/resultados?q=${encodeURIComponent(term)}`);
   }, [q, navigate]);
 
-  // --- atajos de teclado ---
+  // -------- atajos --------
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "Escape") handleLogout();
@@ -112,6 +166,7 @@ export default function Dashboard({ onLogout }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [handleLogout, ejecutarBusqueda]);
 
+  // -------- UI --------
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
       {/* Fondo */}
@@ -144,13 +199,10 @@ export default function Dashboard({ onLogout }) {
         {`@keyframes float { 0%{transform:translateY(0)} 50%{transform:translateY(-10px)} 100%{transform:translateY(0)} }`}
       </style>
 
-      {/* Saludo (arriba izquierda) */}
+      {/* Saludo */}
       <div
         className="absolute left-6 top-6 rounded-xl px-4 py-2"
-        style={{
-          backgroundColor: "rgba(0,0,0,0.35)",
-          backdropFilter: "blur(2px)",
-        }}
+        style={{ backgroundColor: "rgba(0,0,0,0.35)", backdropFilter: "blur(2px)" }}
         aria-live="polite"
       >
         <span className="text-sm opacity-90">👋 Bienvenido,</span>{" "}
@@ -186,11 +238,7 @@ export default function Dashboard({ onLogout }) {
                 onClick={ejecutarBusqueda}
                 className="m-1 h-10 w-10 rounded-full grid place-items-center bg-slate-300/80 hover:scale-105 transition"
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  className="h-5 w-5 fill-slate-700"
-                >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5 fill-slate-700">
                   <path d="M15.5 14h-.79l-.28-.27a6.471 6.471 0 0 0 1.57-4.23C16 6.01 12.99 3 9.5 3S3 6.01 3 9.5 6.01 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99 1.49-1.49-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
                 </svg>
               </button>
@@ -202,10 +250,7 @@ export default function Dashboard({ onLogout }) {
             <button
               onClick={() => navigate("/sugerencias")}
               className="px-6 py-3 rounded-xl font-extrabold text-white flex items-center gap-2 mx-auto"
-              style={{
-                backgroundColor: "#59d2e6",
-                boxShadow: "0 8px 22px rgba(89,210,230,.30)",
-              }}
+              style={{ backgroundColor: "#59d2e6", boxShadow: "0 8px 22px rgba(89,210,230,.30)" }}
             >
               👋 Sugerencias
             </button>
