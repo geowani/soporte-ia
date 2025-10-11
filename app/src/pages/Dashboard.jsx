@@ -1,132 +1,25 @@
 // app/src/pages/Dashboard.jsx
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 export default function Dashboard({ onLogout }) {
-  const nav = useNavigate();
-  const loc = useLocation();
-
   const [q, setQ] = useState("");
-  const [displayName, setDisplayName] = useState(() => getInitialName(loc));
+  const navigate = useNavigate();
 
-  // ========= Helpers =========
+  // --- obtiene userId ---
   function getUserId() {
     const raw = localStorage.getItem("userId");
     const id = Number(raw);
     return Number.isFinite(id) && id > 0 ? id : null;
   }
 
-  function pickName(any) {
-    // normaliza nombres de propiedad típicos
-    return (
-      any?.agente ||
-      any?.nombre_completo ||
-      any?.NOMBRE_COMPLETO ||
-      any?.nombre ||
-      any?.NOMBRE ||
-      any?.fullName ||
-      any?.usuario_nombre ||
-      any?.userName ||
-      any?.username ||
-      any?.correo ||
-      any?.email ||
-      null
-    );
-  }
-
-  function getInitialName(locationObj) {
-    // 1) si el login navegó con estado: navigate('/dashboard', { state: { agente: '...' } })
-    const fromState = pickName(locationObj?.state) || locationObj?.state?.agente;
-    if (fromState && String(fromState).trim()) {
-      sessionStorage.setItem("dup_agent", String(fromState).trim());
-      localStorage.setItem("nombreUsuario", String(fromState).trim());
-      return String(fromState).trim();
-    }
-
-    // 2) session/local storage (todas las claves comunes)
-    const keys = [
-      "dup_agent",
-      "nombreUsuario",
-      "nombre",
-      "usuario_nombre",
-      "userName",
-      "username",
-      "correo",
-      "email",
-    ];
-    for (const k of keys) {
-      const v =
-        (k === "dup_agent"
-          ? sessionStorage.getItem(k)
-          : localStorage.getItem(k)) || null;
-      if (v && v.trim()) return v.trim();
-    }
-
-    return "Usuario";
-  }
-
-  async function resolveNameFromAPI() {
-    if (displayName && displayName !== "Usuario") return;
-
-    const userId = getUserId();
-    const headers = { "Content-Type": "application/json" };
-    if (userId != null) headers["x-user-id"] = String(userId);
-
-    // Rutas candidatas típicas en APIs sin JWT
-    const candidates = [
-      userId != null ? `/api/usuario/${userId}` : null,
-      userId != null ? `/api/usuarios/${userId}` : null,
-      userId != null ? `/api/usuarios/detalle?id=${encodeURIComponent(userId)}` : null,
-      `/api/whoami`,
-      userId != null ? `/api/whoami?userId=${encodeURIComponent(userId)}` : null,
-      userId != null ? `/api/empleado/${userId}` : null,
-    ].filter(Boolean);
-
-    for (const url of candidates) {
-      try {
-        const r = await fetch(url, { headers });
-        console.log("[Dashboard] GET", url, r.status);
-        if (!r.ok) continue;
-
-        const data = await r.json();
-        console.log("[Dashboard] Respuesta", url, data);
-
-        const name = pickName(data) || pickName(data?.data) || pickName(data?.usuario);
-        if (name && String(name).trim()) {
-          const clean = String(name).trim();
-          sessionStorage.setItem("dup_agent", clean);
-          localStorage.setItem("nombreUsuario", clean);
-          setDisplayName(clean);
-          return;
-        }
-      } catch (e) {
-        console.warn("[Dashboard] Error consultando", url, e);
-      }
-    }
-
-    console.warn(
-      "[Dashboard] No se pudo resolver nombre. Sugerencia: guarda nombre en login -> sessionStorage.setItem('dup_agent', nombre)"
-    );
-  }
-
-  // ========= Efectos =========
-  useEffect(() => {
-    if (!displayName || displayName === "Usuario") {
-      resolveNameFromAPI();
-    }
-  }, [displayName]);
-
-  // ========= Logout =========
+  // --- cierre de sesión ---
   const handleLogout = useCallback(() => {
     localStorage.removeItem("userId");
-    ["nombreUsuario", "nombre", "usuario_nombre", "userName", "username", "correo", "email"].forEach(k =>
-      localStorage.removeItem(k)
-    );
-    sessionStorage.removeItem("dup_agent");
     onLogout?.();
   }, [onLogout]);
 
-  // ========= Registrar búsqueda =========
+  // --- registra búsqueda (sin bloquear) ---
   async function registrarBusqueda(term) {
     const userId = getUserId();
     const texto = String(term ?? "").trim();
@@ -135,8 +28,10 @@ export default function Dashboard({ onLogout }) {
     try {
       const headers = { "Content-Type": "application/json" };
       if (userId != null) headers["x-user-id"] = String(userId);
+
       const body = { q: texto, usuarioId: userId ?? null };
 
+      // sin await -> se ejecuta en segundo plano
       fetch("/api/busqueda-evento-registrar", {
         method: "POST",
         headers,
@@ -145,18 +40,19 @@ export default function Dashboard({ onLogout }) {
     } catch {}
   }
 
-  // ========= Búsqueda principal =========
+  // --- búsqueda principal ---
   const ejecutarBusqueda = useCallback(() => {
     const term = q.trim();
     if (!term) {
       alert("Por favor ingresa un término para buscar");
       return;
     }
-    registrarBusqueda(term);
-    nav(`/resultados?q=${encodeURIComponent(term)}`);
-  }, [q, nav]);
 
-  // ========= Atajos =========
+    registrarBusqueda(term);
+    navigate(`/resultados?q=${encodeURIComponent(term)}`);
+  }, [q, navigate]);
+
+  // --- atajos de teclado ---
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "Escape") handleLogout();
@@ -169,7 +65,6 @@ export default function Dashboard({ onLogout }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [handleLogout, ejecutarBusqueda]);
 
-  // ========= UI =========
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
       {/* Fondo */}
@@ -198,17 +93,9 @@ export default function Dashboard({ onLogout }) {
           animation: "float 12s linear infinite",
         }}
       />
-      <style>{`@keyframes float { 0%{transform:translateY(0)} 50%{transform:translateY(-10px)} 100%{transform:translateY(0)} }`}</style>
-
-      {/* Saludo */}
-      <div
-        className="absolute left-6 top-6 rounded-xl px-4 py-2"
-        style={{ backgroundColor: "rgba(0,0,0,0.35)", backdropFilter: "blur(2px)" }}
-        aria-live="polite"
-      >
-        <span className="text-sm opacity-90">👋 Bienvenido,</span>{" "}
-        <strong className="font-semibold">{displayName}</strong>
-      </div>
+      <style>
+        {`@keyframes float { 0%{transform:translateY(0)} 50%{transform:translateY(-10px)} 100%{transform:translateY(0)} }`}
+      </style>
 
       {/* Botón salir */}
       <button
@@ -239,7 +126,11 @@ export default function Dashboard({ onLogout }) {
                 onClick={ejecutarBusqueda}
                 className="m-1 h-10 w-10 rounded-full grid place-items-center bg-slate-300/80 hover:scale-105 transition"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5 fill-slate-700">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  className="h-5 w-5 fill-slate-700"
+                >
                   <path d="M15.5 14h-.79l-.28-.27a6.471 6.471 0 0 0 1.57-4.23C16 6.01 12.99 3 9.5 3S3 6.01 3 9.5 6.01 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99 1.49-1.49-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
                 </svg>
               </button>
@@ -249,9 +140,12 @@ export default function Dashboard({ onLogout }) {
           {/* Botón sugerencias */}
           <div className="mt-12">
             <button
-              onClick={() => nav("/sugerencias")}
+              onClick={() => navigate("/sugerencias")}
               className="px-6 py-3 rounded-xl font-extrabold text-white flex items-center gap-2 mx-auto"
-              style={{ backgroundColor: "#59d2e6", boxShadow: "0 8px 22px rgba(89,210,230,.30)" }}
+              style={{
+                backgroundColor: "#59d2e6",
+                boxShadow: "0 8px 22px rgba(89,210,230,.30)",
+              }}
             >
               👋 Sugerencias
             </button>
