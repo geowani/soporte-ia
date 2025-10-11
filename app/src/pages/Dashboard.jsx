@@ -15,67 +15,42 @@ export default function Dashboard({ onLogout }) {
   }
 
   function getInitialName() {
-    // 1) Prioriza lo que ya exista
     const s =
       sessionStorage.getItem("dup_agent") ||
       localStorage.getItem("nombreUsuario") ||
       localStorage.getItem("nombre");
-    if (s && s.trim()) return s.trim();
-
-    // 2) Intenta sacar del JWT si existe
-    const jwtName = getNameFromJWT();
-    if (jwtName) return jwtName;
-
-    return "Usuario";
+    return (s && s.trim()) || "Usuario";
   }
 
-  function getNameFromJWT() {
-    // Busca tokens comunes
-    const token =
-      localStorage.getItem("token") ||
-      localStorage.getItem("access_token") ||
-      sessionStorage.getItem("token") ||
-      sessionStorage.getItem("access_token");
-    if (!token || token.split(".").length !== 3) return null;
-
-    try {
-      const payload = JSON.parse(
-        atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))
-      );
-      const name =
-        payload?.name ||
-        payload?.given_name ||
-        payload?.preferred_username ||
-        payload?.unique_name ||
-        payload?.email ||
-        null;
-      return name || null;
-    } catch {
-      return null;
-    }
+  function pickName(data) {
+    // Normaliza posibles nombres de propiedad que pueda devolver tu API/BD
+    return (
+      data?.nombre_completo ||
+      data?.NOMBRE_COMPLETO ||
+      data?.nombre ||
+      data?.NOMBRE ||
+      data?.fullName ||
+      data?.agente ||
+      data?.usuario_nombre ||
+      data?.email ||
+      null
+    );
   }
 
   async function resolveNameFromAPI() {
-    // 3) Si seguimos con "Usuario", intenta pedirlo al backend
+    // Si ya tenemos nombre real, no consultes
     if (displayName && displayName !== "Usuario") return;
 
     const userId = getUserId();
     const headers = { "Content-Type": "application/json" };
-
-    // Si tienes JWT, envíalo
-    const bearer =
-      localStorage.getItem("token") ||
-      localStorage.getItem("access_token") ||
-      sessionStorage.getItem("token") ||
-      sessionStorage.getItem("access_token");
-    if (bearer) headers["Authorization"] = `Bearer ${bearer}`;
-
     if (userId != null) headers["x-user-id"] = String(userId);
 
+    // Prueba varias rutas comunes
     const candidates = [
       userId != null ? `/api/usuario/${userId}` : null,
       userId != null ? `/api/usuarios/${userId}` : null,
       `/api/whoami`,
+      userId != null ? `/api/whoami?userId=${encodeURIComponent(userId)}` : null,
     ].filter(Boolean);
 
     for (const url of candidates) {
@@ -83,30 +58,23 @@ export default function Dashboard({ onLogout }) {
         const r = await fetch(url, { headers });
         if (!r.ok) continue;
         const data = await r.json();
-        const name =
-          data?.nombre_completo ||
-          data?.nombre ||
-          data?.fullName ||
-          data?.agente ||
-          data?.username ||
-          data?.email ||
-          null;
+        const name = pickName(data);
         if (name && String(name).trim()) {
           const clean = String(name).trim();
-          setDisplayName(clean);
           sessionStorage.setItem("dup_agent", clean);
           localStorage.setItem("nombreUsuario", clean);
+          setDisplayName(clean);
           return;
         }
       } catch {
         // intenta la siguiente ruta
       }
     }
+    // Si ninguna ruta devolvió nombre, permanece "Usuario"
   }
 
   // -------- efectos --------
   useEffect(() => {
-    // si aún no tenemos nombre real, intenta resolver desde API/JWT
     if (!displayName || displayName === "Usuario") {
       resolveNameFromAPI();
     }
@@ -118,8 +86,6 @@ export default function Dashboard({ onLogout }) {
     localStorage.removeItem("nombreUsuario");
     localStorage.removeItem("nombre");
     sessionStorage.removeItem("dup_agent");
-    // opcional: limpiar tokens si aplica
-    // localStorage.removeItem("token"); localStorage.removeItem("access_token");
     onLogout?.();
   }, [onLogout]);
 
