@@ -1,64 +1,97 @@
 // app/src/pages/Dashboard.jsx
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 export default function Dashboard({ onLogout }) {
-  const [q, setQ] = useState("");
-  const [displayName, setDisplayName] = useState(getInitialName());
-  const navigate = useNavigate();
+  const nav = useNavigate();
+  const loc = useLocation();
 
-  // -------- helpers --------
+  const [q, setQ] = useState("");
+  const [displayName, setDisplayName] = useState(() => getInitialName(loc));
+
+  // ========= Helpers =========
   function getUserId() {
     const raw = localStorage.getItem("userId");
     const id = Number(raw);
     return Number.isFinite(id) && id > 0 ? id : null;
   }
 
-  function getInitialName() {
-    const s =
-      sessionStorage.getItem("dup_agent") ||
-      localStorage.getItem("nombreUsuario") ||
-      localStorage.getItem("nombre");
-    return (s && s.trim()) || "Usuario";
-  }
-
-  function pickName(data) {
-    // Normaliza posibles nombres de propiedad que pueda devolver tu API/BD
+  function pickName(any) {
+    // normaliza nombres de propiedad típicos
     return (
-      data?.nombre_completo ||
-      data?.NOMBRE_COMPLETO ||
-      data?.nombre ||
-      data?.NOMBRE ||
-      data?.fullName ||
-      data?.agente ||
-      data?.usuario_nombre ||
-      data?.email ||
+      any?.agente ||
+      any?.nombre_completo ||
+      any?.NOMBRE_COMPLETO ||
+      any?.nombre ||
+      any?.NOMBRE ||
+      any?.fullName ||
+      any?.usuario_nombre ||
+      any?.userName ||
+      any?.username ||
+      any?.correo ||
+      any?.email ||
       null
     );
   }
 
+  function getInitialName(locationObj) {
+    // 1) si el login navegó con estado: navigate('/dashboard', { state: { agente: '...' } })
+    const fromState = pickName(locationObj?.state) || locationObj?.state?.agente;
+    if (fromState && String(fromState).trim()) {
+      sessionStorage.setItem("dup_agent", String(fromState).trim());
+      localStorage.setItem("nombreUsuario", String(fromState).trim());
+      return String(fromState).trim();
+    }
+
+    // 2) session/local storage (todas las claves comunes)
+    const keys = [
+      "dup_agent",
+      "nombreUsuario",
+      "nombre",
+      "usuario_nombre",
+      "userName",
+      "username",
+      "correo",
+      "email",
+    ];
+    for (const k of keys) {
+      const v =
+        (k === "dup_agent"
+          ? sessionStorage.getItem(k)
+          : localStorage.getItem(k)) || null;
+      if (v && v.trim()) return v.trim();
+    }
+
+    return "Usuario";
+  }
+
   async function resolveNameFromAPI() {
-    // Si ya tenemos nombre real, no consultes
     if (displayName && displayName !== "Usuario") return;
 
     const userId = getUserId();
     const headers = { "Content-Type": "application/json" };
     if (userId != null) headers["x-user-id"] = String(userId);
 
-    // Prueba varias rutas comunes
+    // Rutas candidatas típicas en APIs sin JWT
     const candidates = [
       userId != null ? `/api/usuario/${userId}` : null,
       userId != null ? `/api/usuarios/${userId}` : null,
+      userId != null ? `/api/usuarios/detalle?id=${encodeURIComponent(userId)}` : null,
       `/api/whoami`,
       userId != null ? `/api/whoami?userId=${encodeURIComponent(userId)}` : null,
+      userId != null ? `/api/empleado/${userId}` : null,
     ].filter(Boolean);
 
     for (const url of candidates) {
       try {
         const r = await fetch(url, { headers });
+        console.log("[Dashboard] GET", url, r.status);
         if (!r.ok) continue;
+
         const data = await r.json();
-        const name = pickName(data);
+        console.log("[Dashboard] Respuesta", url, data);
+
+        const name = pickName(data) || pickName(data?.data) || pickName(data?.usuario);
         if (name && String(name).trim()) {
           const clean = String(name).trim();
           sessionStorage.setItem("dup_agent", clean);
@@ -66,30 +99,34 @@ export default function Dashboard({ onLogout }) {
           setDisplayName(clean);
           return;
         }
-      } catch {
-        // intenta la siguiente ruta
+      } catch (e) {
+        console.warn("[Dashboard] Error consultando", url, e);
       }
     }
-    // Si ninguna ruta devolvió nombre, permanece "Usuario"
+
+    console.warn(
+      "[Dashboard] No se pudo resolver nombre. Sugerencia: guarda nombre en login -> sessionStorage.setItem('dup_agent', nombre)"
+    );
   }
 
-  // -------- efectos --------
+  // ========= Efectos =========
   useEffect(() => {
     if (!displayName || displayName === "Usuario") {
       resolveNameFromAPI();
     }
   }, [displayName]);
 
-  // -------- logout --------
+  // ========= Logout =========
   const handleLogout = useCallback(() => {
     localStorage.removeItem("userId");
-    localStorage.removeItem("nombreUsuario");
-    localStorage.removeItem("nombre");
+    ["nombreUsuario", "nombre", "usuario_nombre", "userName", "username", "correo", "email"].forEach(k =>
+      localStorage.removeItem(k)
+    );
     sessionStorage.removeItem("dup_agent");
     onLogout?.();
   }, [onLogout]);
 
-  // -------- registrar búsqueda --------
+  // ========= Registrar búsqueda =========
   async function registrarBusqueda(term) {
     const userId = getUserId();
     const texto = String(term ?? "").trim();
@@ -108,7 +145,7 @@ export default function Dashboard({ onLogout }) {
     } catch {}
   }
 
-  // -------- búsqueda principal --------
+  // ========= Búsqueda principal =========
   const ejecutarBusqueda = useCallback(() => {
     const term = q.trim();
     if (!term) {
@@ -116,10 +153,10 @@ export default function Dashboard({ onLogout }) {
       return;
     }
     registrarBusqueda(term);
-    navigate(`/resultados?q=${encodeURIComponent(term)}`);
-  }, [q, navigate]);
+    nav(`/resultados?q=${encodeURIComponent(term)}`);
+  }, [q, nav]);
 
-  // -------- atajos --------
+  // ========= Atajos =========
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "Escape") handleLogout();
@@ -132,7 +169,7 @@ export default function Dashboard({ onLogout }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [handleLogout, ejecutarBusqueda]);
 
-  // -------- UI --------
+  // ========= UI =========
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
       {/* Fondo */}
@@ -161,9 +198,7 @@ export default function Dashboard({ onLogout }) {
           animation: "float 12s linear infinite",
         }}
       />
-      <style>
-        {`@keyframes float { 0%{transform:translateY(0)} 50%{transform:translateY(-10px)} 100%{transform:translateY(0)} }`}
-      </style>
+      <style>{`@keyframes float { 0%{transform:translateY(0)} 50%{transform:translateY(-10px)} 100%{transform:translateY(0)} }`}</style>
 
       {/* Saludo */}
       <div
@@ -214,7 +249,7 @@ export default function Dashboard({ onLogout }) {
           {/* Botón sugerencias */}
           <div className="mt-12">
             <button
-              onClick={() => navigate("/sugerencias")}
+              onClick={() => nav("/sugerencias")}
               className="px-6 py-3 rounded-xl font-extrabold text-white flex items-center gap-2 mx-auto"
               style={{ backgroundColor: "#59d2e6", boxShadow: "0 8px 22px rgba(89,210,230,.30)" }}
             >
