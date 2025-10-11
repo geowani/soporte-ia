@@ -2,49 +2,26 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 
-export default function Dashboard({ onLogout, isBlocked = false }) {
+export default function Dashboard({ onLogout }) {
   const [q, setQ] = useState("");
-  const [forceAi, setForceAi] = useState(false);
-
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null); // { mode, query, answer, casoSugeridoId, ... }
-  const [error, setError] = useState(null);
-
   const navigate = useNavigate();
 
-  // Lee un userId válido (>0). Si no, devuelve null.
+  // --- obtiene userId ---
   function getUserId() {
     const raw = localStorage.getItem("userId");
     const id = Number(raw);
     return Number.isFinite(id) && id > 0 ? id : null;
   }
 
-  // Limpia userId al cerrar sesión
+  // --- cierre de sesión ---
   const handleLogout = useCallback(() => {
     localStorage.removeItem("userId");
     onLogout?.();
   }, [onLogout]);
 
-  // (Opcional) intenta poblar userId desde un perfil guardado
-  useEffect(() => {
-    if (getUserId() == null) {
-      try {
-        const raw = localStorage.getItem("user") || sessionStorage.getItem("user");
-        if (raw) {
-          const u = JSON.parse(raw);
-          const candidate = Number(u?.id_usuario ?? u?.id ?? u?.userId);
-          if (Number.isFinite(candidate) && candidate > 0) {
-            localStorage.setItem("userId", String(candidate));
-          }
-        }
-      } catch {}
-    }
-    console.log("[Dashboard] userId activo:", getUserId());
-  }, []);
-
-  // Registra la búsqueda en backend
-  async function registrarBusqueda(term, { casoId = null, score = null } = {}) {
-    const userId = getUserId(); // null si no hay válido
+  // --- registra búsqueda (sin bloquear) ---
+  async function registrarBusqueda(term) {
+    const userId = getUserId();
     const texto = String(term ?? "").trim();
     if (!texto) return;
 
@@ -52,64 +29,30 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
       const headers = { "Content-Type": "application/json" };
       if (userId != null) headers["x-user-id"] = String(userId);
 
-      const body = { q: texto };
-      if (casoId != null) body.casoId = casoId;
-      if (score != null) body.score = score;
-      if (userId != null) body.usuarioId = userId;
+      const body = { q: texto, usuarioId: userId ?? null };
 
-      const res = await fetch("/api/busqueda-evento-registrar", {
+      // sin await -> se ejecuta en segundo plano
+      fetch("/api/busqueda-evento-registrar", {
         method: "POST",
         headers,
         body: JSON.stringify(body),
-      });
-
-      const json = await res.json().catch(() => ({}));
-      console.log("[registrarBusqueda] response:", res.status, json);
-    } catch (e) {
-      console.warn("[registrarBusqueda] error:", e);
-    }
+      }).catch(() => {});
+    } catch {}
   }
 
-  // Llama a la IA/BD y muestra resultado debajo del buscador
-  const ejecutarBusqueda = useCallback(async () => {
+  // --- búsqueda principal ---
+  const ejecutarBusqueda = useCallback(() => {
     const term = q.trim();
     if (!term) {
       alert("Por favor ingresa un término para buscar");
       return;
     }
 
-    setLoading(true);
-    setError(null);
-    setResult(null);
+    registrarBusqueda(term);
+    navigate(`/resultados?q=${encodeURIComponent(term)}`);
+  }, [q, navigate]);
 
-    try {
-      const userId = getUserId() ?? 0;
-      const res = await fetch("/api/ai-answer", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ q: term, userId, forceAi }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.error || "Error en la API");
-      }
-
-      setResult(data);
-
-      // registra la búsqueda (si tienes SP para logging)
-      await registrarBusqueda(term, {
-        casoId: data?.casoSugeridoId ?? null,
-        score: data?.mode === "db" ? 1.0 : null,
-      });
-    } catch (e) {
-      setError(e?.message || "Error realizando la búsqueda");
-    } finally {
-      setLoading(false);
-    }
-  }, [q, forceAi]);
-
-  // ENTER para buscar / ESC para salir
+  // --- atajos de teclado ---
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "Escape") handleLogout();
@@ -121,54 +64,6 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [handleLogout, ejecutarBusqueda]);
-
-  // Render helpers
-  function Badge({ mode }) {
-    const isDb = mode === "db";
-    const color = isDb ? "bg-emerald-500" : "bg-indigo-500";
-    const label = isDb ? "Base de datos" : "IA (Gemini)";
-    return (
-      <span className={`inline-block px-3 py-1 rounded-full text-white text-xs font-bold ${color}`}>
-        {label}
-      </span>
-    );
-  }
-
-  function AnswerBlock({ data }) {
-    if (!data) return null;
-    const { mode, answer, casoSugeridoId } = data;
-
-    return (
-      <div className="mt-6 w-full max-w-2xl mx-auto rounded-xl bg-white/90 text-slate-900 p-5 shadow-[0_12px_40px_rgba(0,0,0,.30)]">
-        <div className="flex items-center justify-between gap-3">
-          <Badge mode={mode} />
-          {mode === "db" && !!casoSugeridoId && (
-            <button
-              onClick={() => navigate(`/caso/${casoSugeridoId}`)}
-              className="px-3 py-1.5 rounded-md bg-slate-800 text-white text-sm font-semibold hover:bg-slate-900"
-              title="Ver detalle del caso sugerido"
-            >
-              Ver detalle
-            </button>
-          )}
-        </div>
-
-        <div className="mt-4 whitespace-pre-wrap leading-relaxed">
-          {answer}
-        </div>
-
-        <div className="mt-4 flex items-center justify-end gap-3">
-          <button
-            onClick={() => navigate(`/resultados?q=${encodeURIComponent(q)}`)}
-            className="px-3 py-1.5 rounded-md bg-slate-700 text-white text-sm hover:bg-slate-800"
-            title="Ver más resultados"
-          >
-            Ver más
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
@@ -182,6 +77,7 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
           backgroundRepeat: "no-repeat",
         }}
       />
+
       {/* Partículas */}
       <div
         className="absolute inset-0 -z-10 opacity-45"
@@ -201,12 +97,10 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
         {`@keyframes float { 0%{transform:translateY(0)} 50%{transform:translateY(-10px)} 100%{transform:translateY(0)} }`}
       </style>
 
-      {/* Salir */}
+      {/* Botón salir */}
       <button
         onClick={handleLogout}
         className="absolute right-6 top-6 px-5 py-2 rounded-full bg-red-500/90 hover:bg-red-600 font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-white/50"
-        aria-label="Cerrar sesión"
-        title="Cerrar sesión"
       >
         Salir
       </button>
@@ -214,7 +108,7 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
       {/* Contenido */}
       <div className="min-h-screen grid place-items-center p-6">
         <section className="w-full max-w-4xl text-center">
-          <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-extrabold tracking-widest drop-shadow-[0_10px_40px_rgba(0,0,0,.6)]">
+          <h1 className="text-6xl md:text-7xl font-extrabold tracking-widest drop-shadow-[0_10px_40px_rgba(0,0,0,.6)]">
             BASE DE CASOS
           </h1>
 
@@ -227,32 +121,31 @@ export default function Dashboard({ onLogout, isBlocked = false }) {
                 placeholder="Busca por título, id o síntoma"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                aria-label="Barra de búsqueda"
               />
               <button
                 onClick={ejecutarBusqueda}
                 className="m-1 h-10 w-10 rounded-full grid place-items-center bg-slate-300/80 hover:scale-105 transition"
-                aria-label="Buscar"
-                title="Buscar"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5 fill-slate-700">
-                  <path d="M15.5 14h-.79l-.28-.27a6.471 6.471 0 0 0 1.57-4.23C16 6.01 12.99 3 9.5 3S3 6.01 3 9.5 6.01 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99 1.49-1.49-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  className="h-5 w-5 fill-slate-700"
+                >
+                  <path d="M15.5 14h-.79l-.28-.27a6.471 6.471 0 0 0 1.57-4.23C16 6.01 12.99 3 9.5 3S3 6.01 3 9.5 6.01 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99 1.49-1.49-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
                 </svg>
               </button>
             </div>
           </div>
 
-          {/* Resultado */}
-          <AnswerBlock data={result} />
-
-          {/* Botón Sugerencias */}
+          {/* Botón sugerencias */}
           <div className="mt-12">
             <button
               onClick={() => navigate("/sugerencias")}
               className="px-6 py-3 rounded-xl font-extrabold text-white flex items-center gap-2 mx-auto"
-              style={{ backgroundColor: "#59d2e6", boxShadow: "0 8px 22px rgba(89,210,230,.30)" }}
-              aria-label="Sugerencias"
-              title="Sugerencias"
+              style={{
+                backgroundColor: "#59d2e6",
+                boxShadow: "0 8px 22px rgba(89,210,230,.30)",
+              }}
             >
               👋 Sugerencias
             </button>
