@@ -13,9 +13,18 @@ export default function Dashboard({ onLogout }) {
     return Number.isFinite(id) && id > 0 ? id : null;
   }
 
+  // --- nombre de usuario (desde localStorage) ---
+  // Ajusta la clave si tu login guarda otro nombre (p.ej. "nombre" o "fullName")
+  const nombreUsuario =
+    localStorage.getItem("nombreUsuario") ||
+    localStorage.getItem("nombre") ||
+    "Usuario";
+
   // --- cierre de sesión ---
   const handleLogout = useCallback(() => {
     localStorage.removeItem("userId");
+    localStorage.removeItem("nombreUsuario");
+    localStorage.removeItem("nombre");
     onLogout?.();
   }, [onLogout]);
 
@@ -96,6 +105,19 @@ export default function Dashboard({ onLogout }) {
       <style>
         {`@keyframes float { 0%{transform:translateY(0)} 50%{transform:translateY(-10px)} 100%{transform:translateY(0)} }`}
       </style>
+
+      {/* Saludo (arriba izquierda) */}
+      <div
+        className="absolute left-6 top-6 rounded-xl px-4 py-2"
+        style={{
+          backgroundColor: "rgba(0,0,0,0.35)",
+          backdropFilter: "blur(2px)",
+        }}
+        aria-live="polite"
+      >
+        <span className="text-sm opacity-90">👋 Bienvenido,</span>{" "}
+        <strong className="font-semibold">{nombreUsuario}</strong>
+      </div>
 
       {/* Botón salir */}
       <button
