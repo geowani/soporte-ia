@@ -87,6 +87,16 @@ export default function Resultados() {
     return t.replace(/\n{3,}/g, "\n\n").trim();
   }
 
+  // === Eliminar emojis ===
+  function removeEmojis(text) {
+    if (!text) return "";
+    // Rango amplio de pictogramas + variantes (FE0F) y banderas
+    return text.replace(
+      /([\u2700-\u27BF]|[\uE000-\uF8FF]|[\u1F300-\u1F6FF]|[\u1F900-\u1F9FF]|[\u1F1E6-\u1F1FF]|[\u2600-\u26FF]|\uFE0F)/g,
+      ""
+    );
+  }
+
   // === Buscar en BD ===
   const runSearch = useCallback(async (term) => {
     const texto = String(term ?? "").trim();
@@ -144,6 +154,7 @@ export default function Resultados() {
 
       let answer = cleanMarkdown(data?.answer || "");
       answer = stripDbSummaryBlocks(answer);
+      answer = removeEmojis(answer); // <-- sin emojis
       setAiResult({ answer });
     } catch (e) {
       setAiError(e?.message || "Error generando respuesta");
@@ -283,9 +294,9 @@ export default function Resultados() {
               {aiResult && (
                 <div className="mt-3 bg-white/80 border border-slate-300 rounded-md p-4 whitespace-pre-wrap leading-relaxed text-slate-800">
                   <div className="font-semibold mb-2 text-slate-900">
-                    💡 Respuesta generada con inteligencia artificial:
+                    Respuesta generada con inteligencia artificial:
                   </div>
-                  {cleanMarkdown(stripDbSummaryBlocks(aiResult.answer)) || (
+                  {removeEmojis(aiResult.answer) || (
                     <span className="text-slate-600 italic">
                       No se generó texto. Intenta de nuevo.
                     </span>
