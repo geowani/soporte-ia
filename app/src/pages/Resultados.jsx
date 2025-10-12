@@ -7,33 +7,28 @@ export default function Resultados() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Lee ?q= de la URL
   const urlQ = new URLSearchParams(location.search).get("q") || "";
   const [q, setQ] = useState(urlQ);
 
-  // ===== Estados principales =====
-  const [items, setItems] = useState([]); // lista cuando hay BD
+  const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // ===== IA bajo demanda (solo si no hay BD) =====
+  // ===== IA bajo demanda =====
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
-  const [aiResult, setAiResult] = useState(null); // { answer }
+  const [aiResult, setAiResult] = useState(null);
 
-  // Lleva control del último término ya registrado para evitar dobles/omisiones
   const lastRegisteredRef = useRef(null);
 
-  // helper para userId válido
+  // === Helpers ===
   function getUserId() {
     const raw = localStorage.getItem("userId");
     const id = Number(raw);
     return Number.isFinite(id) && id > 0 ? id : null;
   }
 
-  // registra búsqueda en backend (segura con userId opcional)
   async function registrarBusqueda(term, { casoId = null, score = null } = {}) {
     const userId = getUserId();
     const texto = String(term ?? "").trim();
@@ -42,29 +37,24 @@ export default function Resultados() {
     try {
       const headers = { "Content-Type": "application/json" };
       if (userId != null) headers["x-user-id"] = String(userId);
-
       const body = { q: texto };
       if (userId != null) body.usuarioId = userId;
       if (casoId != null) body.casoId = casoId;
       if (score != null) body.score = score;
 
-      const res = await fetch("/api/busqueda-evento-registrar", {
+      await fetch("/api/busqueda-evento-registrar", {
         method: "POST",
         headers,
         body: JSON.stringify(body),
       });
-      await res.json().catch(() => ({}));
     } catch {
-      // silencioso; no romper UX
+      // silencioso
     }
   }
 
-  // Mantén input sincronizado si cambia la URL
-  useEffect(() => {
-    setQ(urlQ);
-  }, [urlQ]);
+  useEffect(() => setQ(urlQ), [urlQ]);
 
-  // Limpia/normaliza markdown y respeta listas numeradas / viñetas con separación visual
+  // === Limpieza de Markdown ===
   function cleanMarkdown(s) {
     if (!s) return "";
     let t = String(s)
@@ -84,22 +74,20 @@ export default function Resultados() {
       if ((isNumbered || isBullet) && out.length && out[out.length - 1] !== "") out.push("");
       out.push(L);
     }
-    t = out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
-    return t;
+    return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
   }
 
-  // Filtro extra para borrar textos tipo "Encontré casos..." de la IA
+  // === Eliminar texto innecesario de la IA ===
   function stripDbSummaryBlocks(txt) {
     if (!txt) return "";
     let t = String(txt);
     t = t.replace(/Encontr[ée]\s+casos\s+relacionados[\s\S]*?(?:Resumen:[^\n]*\n?)?/i, "");
     t = t.replace(/Sugerencia\s+principal:[^\n]*\n?/i, "");
     t = t.replace(/^\s*-\s*#\d+.*$/gmi, "");
-    t = t.replace(/\n{3,}/g, "\n\n").trim();
-    return t;
+    return t.replace(/\n{3,}/g, "\n\n").trim();
   }
 
-  // ========= 1) Buscar en BD primero (sin IA automática) =========
+  // === Buscar en BD ===
   const runSearch = useCallback(async (term) => {
     const texto = String(term ?? "").trim();
     if (!texto) {
@@ -130,14 +118,12 @@ export default function Resultados() {
       setTotal(r.total ?? arr.length);
     } catch (e) {
       setError(e?.message || "Error al buscar casos");
-      setItems([]);
-      setTotal(0);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // ========= 2) IA on-demand (click del usuario) =========
+  // === Generar con IA ===
   const generateAi = useCallback(async () => {
     const texto = q.trim();
     if (!texto) return;
@@ -150,11 +136,9 @@ export default function Resultados() {
       const res = await fetch("/api/ai-answer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          q: texto,
-          userId: getUserId() ?? 0,
-        }),
+        body: JSON.stringify({ q: texto, userId: getUserId() ?? 0 }),
       });
+
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Error generando respuesta");
 
@@ -163,36 +147,29 @@ export default function Resultados() {
       setAiResult({ answer });
     } catch (e) {
       setAiError(e?.message || "Error generando respuesta");
-      setAiResult(null);
     } finally {
       setAiLoading(false);
     }
   }, [q]);
 
-  // Carga resultados cuando cambia ?q=
   useEffect(() => {
     runSearch(urlQ);
   }, [urlQ, runSearch]);
 
-  // Submit de búsqueda desde esta página:
   const doSearch = useCallback(async () => {
     const term = q.trim();
     if (!term) return;
-
     if (lastRegisteredRef.current !== term) {
       await registrarBusqueda(term);
       lastRegisteredRef.current = term;
     }
-
     navigate(`/resultados?q=${encodeURIComponent(term)}`, { replace: true });
   }, [q, navigate]);
 
-  // Mostrar panel IA solo cuando NO hay resultados y hay texto
   const showAsideIA = useMemo(() => {
-    return q.trim() && !loading && !error && (items?.length || 0) === 0;
-  }, [q, loading, error, items]);
+    return q.trim() && !loading && !error && (items?.length || 0) === 0 && !aiResult;
+  }, [q, loading, error, items, aiResult]);
 
-  // Mensajes derivados
   const emptyMessage = useMemo(() => {
     if (!q.trim()) return "Escribe un término para buscar.";
     if (loading || error) return "";
@@ -209,7 +186,6 @@ export default function Resultados() {
           backgroundImage: "url('/fondo.jpg')",
           backgroundSize: "cover",
           backgroundPosition: "center",
-          backgroundRepeat: "no-repeat",
         }}
       />
 
@@ -220,7 +196,7 @@ export default function Resultados() {
         </h1>
         <button
           onClick={() => navigate("/dashboard")}
-          className="absolute right-6 top-6 px-5 py-2 rounded-full bg-red-500/90 hover:bg-red-600 font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-white/50"
+          className="absolute right-6 top-6 px-5 py-2 rounded-full bg-red-500/90 hover:bg-red-600 font-semibold shadow-md transition"
         >
           REGRESAR
         </button>
@@ -230,39 +206,30 @@ export default function Resultados() {
       <div
         className={[
           "mt-6 px-4 w-full flex flex-col items-center transition-[padding] duration-200",
-          // cuando el aside está visible, damos espacio a la derecha para que no se solape
-          showAsideIA ? "lg:pr-[150px]" : ""
+          showAsideIA ? "lg:pr-[200px]" : "",
         ].join(" ")}
       >
         {/* Buscador */}
-        <div className="w-full max-w-3xl flex items-center rounded-full bg-white/85 text-slate-900 overflow-hidden shadow-inner shadow-black/10">
+        <div className="w-full max-w-3xl flex items-center rounded-full bg-white/85 text-slate-900 overflow-hidden shadow-inner">
           <input
             className="flex-1 bg-transparent px-4 py-3 outline-none placeholder:text-slate-600"
             type="text"
             placeholder="Busca por título, id o síntoma"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                doSearch();
-              }
-            }}
-            aria-label="Barra de búsqueda"
+            onKeyDown={(e) => e.key === "Enter" && doSearch()}
           />
           <button
             onClick={doSearch}
             className="m-1 h-10 w-10 rounded-full grid place-items-center bg-slate-300/80 hover:scale-105 transition"
-            aria-label="Buscar"
-            title="Buscar"
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5 fill-slate-700">
-              <path d="M15.5 14h-.79l-.28-.27a6.471 6.471 0 0 0 1.57-4.23C16 6.01 12.99 3 9.5 3S3 6.01 3 9.5 6.01 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99 1.49-1.49-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+              <path d="M15.5 14h-.79l-.28-.27a6.471 6.471 0 0 0 1.57-4.23C16 6.01 12.99 3 9.5 3S3 6.01 3 9.5 6.01 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99 1.49-1.49-4.99-5zM9.5 14C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
             </svg>
           </button>
         </div>
 
-        {/* CARD DE RESULTADOS */}
+        {/* CARD RESULTADOS */}
         <div className="mt-5 w-full max-w-4xl rounded-2xl bg-slate-200/85 text-slate-900 p-5 md:p-6 border border-white/20 shadow-[0_20px_60px_rgba(0,0,0,.35)]">
           <div className="flex items-center justify-between mb-3">
             <div className="font-bold text-lg">Resultados:</div>
@@ -274,110 +241,69 @@ export default function Resultados() {
           </div>
 
           {!!error && (
-            <div className="text-red-700 bg-red-100/70 border border-red-300 rounded-md px-3 py-2 mb-3">
+            <div className="text-red-700 bg-red-100 border border-red-300 rounded-md px-3 py-2 mb-3">
               {error}
             </div>
           )}
 
-          {!!emptyMessage && (
-            <div className="text-slate-700">{emptyMessage}</div>
-          )}
-
-          {loading && (
-            <div className="text-slate-700 animate-pulse">Buscando…</div>
-          )}
-
-          {/* Lista detallada desde SP (BD primero y principal) */}
+          {/* Si hay resultados de BD */}
           {!loading && !error && items?.length > 0 && (
             <div className="max-h-[60vh] overflow-y-auto pr-2">
-              {items.map((c, i) => {
-                const idCaso = c.id_caso ?? c.id ?? c.numero_caso ?? 0;
-                const numero = c.numero_caso ?? "";
-                const area = c.departamento ?? "";
-                const asunto = c.asunto ?? "";
-                const descripcion = c.descripcion ?? "";
-
-                return (
-                  <div key={`${idCaso}-${i}`} className="py-3">
-                    <div className="flex items-start justify-between">
-                      <button
-                        onClick={() =>
-                          navigate(`/caso/${idCaso}`, { state: { fromQ: q, row: c } })
-                        }
-                        className="text-blue-600 font-bold hover:underline text-left"
-                        title={asunto || "Ver detalle"}
-                      >
-                        Caso: {numero || idCaso}
-                      </button>
-                      <span className="text-blue-600 font-semibold">
-                        {area || "—"}
-                      </span>
-                    </div>
-
-                    <div className="text-slate-800 mt-1">
-                      {asunto && <span className="font-semibold">{asunto}. </span>}
-                      <span className="text-blue-600">
-                        Descripción: {descripcion}
-                      </span>
-                    </div>
-
-                    {i < items.length - 1 && (
-                      <div className="mt-3 h-px bg-slate-500/60 w-full"></div>
-                    )}
+              {items.map((c, i) => (
+                <div key={i} className="py-3 border-b border-slate-400/40">
+                  <div className="flex items-start justify-between">
+                    <button
+                      onClick={() => navigate(`/caso/${c.id_caso ?? c.id}`, { state: { fromQ: q, row: c } })}
+                      className="text-blue-600 font-bold hover:underline text-left"
+                    >
+                      Caso: {c.numero_caso ?? c.id_caso}
+                    </button>
+                    <span className="text-blue-600 font-semibold">{c.departamento || "—"}</span>
                   </div>
-                );
-              })}
+                  <div className="text-slate-800 mt-1">
+                    {c.asunto && <span className="font-semibold">{c.asunto}. </span>}
+                    <span className="text-blue-600">Descripción: {c.descripcion}</span>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
-          {/* En móvil, si NO hay resultados, mostramos el CTA adentro */}
-          {showAsideIA && (
-            <section className="lg:hidden mt-5 p-4 rounded-md bg-white/70 border border-slate-300">
-              <div className="font-semibold mb-1">¿No encontraste lo que buscabas?</div>
-              <p className="text-sm mb-3">
-                Generar una respuesta con IA para: <b>“{q}”</b>
-              </p>
-              <button
-                className="w-full px-3 py-2 rounded bg-slate-800 text-white hover:bg-slate-900 disabled:opacity-60"
-                onClick={generateAi}
-                disabled={aiLoading}
-              >
-                {aiLoading ? "Generando…" : "Generar con IA"}
-              </button>
-              {!!aiError && (
-                <div className="mt-3 text-red-700 bg-red-100/70 border border-red-300 rounded-md px-3 py-2">
-                  {aiError}
-                </div>
+          {/* Si NO hay resultados */}
+          {!loading && !error && (items?.length || 0) === 0 && q.trim() && (
+            <div className="mt-2">
+              {aiLoading && (
+                <div className="text-slate-700 animate-pulse">Generando respuesta con IA…</div>
               )}
+
+              {!aiLoading && !aiResult && (
+                <div className="text-slate-700">{emptyMessage}</div>
+              )}
+
               {aiResult && (
-                <div className="mt-3 whitespace-pre-wrap leading-relaxed text-sm">
-                  {cleanMarkdown(stripDbSummaryBlocks(aiResult.answer))}
+                <div className="mt-3 bg-white/80 border border-slate-300 rounded-md p-4 whitespace-pre-wrap leading-relaxed text-slate-800">
+                  <div className="font-semibold mb-2 text-slate-900">
+                    💡 Respuesta generada con inteligencia artificial:
+                  </div>
+                  {cleanMarkdown(stripDbSummaryBlocks(aiResult.answer)) || (
+                    <span className="text-slate-600 italic">
+                      No se generó texto. Intenta de nuevo.
+                    </span>
+                  )}
                 </div>
               )}
-            </section>
+            </div>
           )}
         </div>
-
-        <div className="h-10" />
       </div>
 
-      {/* PANEL IA — fijo a la derecha SOLO cuando NO hay resultados (como en tu segunda imagen) */}
+      {/* PANEL LATERAL IA */}
       {showAsideIA && (
-        <aside
-          className={[
-            "hidden lg:block fixed right-6 z-40",
-            "top-[180px]", // ajusta si lo quieres más arriba/abajo
-            "w-[320px] rounded-2xl p-4 border shadow-[0_12px_40px_rgba(0,0,0,.25)]",
-            "bg-white/80 text-slate-900 border-white/30",
-            "ring-2 ring-sky-400"
-          ].join(" ")}
-          aria-label="Asistencia con IA"
-        >
+        <aside className="hidden lg:block fixed right-6 top-[180px] w-[320px] rounded-2xl p-4 border shadow-[0_12px_40px_rgba(0,0,0,.25)] bg-white/80 text-slate-900 border-white/30 ring-2 ring-sky-400">
           <div className="font-semibold text-base mb-1">¿No encontraste lo que buscabas?</div>
           <p className="text-sm mb-3">
             Generar una respuesta con IA para: <b>“{q}”</b>
           </p>
-
           <button
             className="w-full px-3 py-2 rounded bg-slate-800 text-white hover:bg-slate-900 disabled:opacity-60"
             onClick={generateAi}
@@ -385,26 +311,16 @@ export default function Resultados() {
           >
             {aiLoading ? "Generando…" : "Generar con IA"}
           </button>
-
           {!!aiError && (
-            <div className="mt-3 text-red-700 bg-red-100/70 border border-red-300 rounded-md px-3 py-2">
+            <div className="mt-3 text-red-700 bg-red-100 border border-red-300 rounded-md px-3 py-2">
               {aiError}
             </div>
           )}
-
-          {aiResult && (
-            <div className="mt-3 max-h-[50vh] overflow-auto pr-1 whitespace-pre-wrap leading-relaxed text-sm">
-              {cleanMarkdown(stripDbSummaryBlocks(aiResult.answer))}
-            </div>
-          )}
-
-          {!aiResult && (
-            <ul className="mt-3 text-xs text-slate-700 space-y-1">
-              <li>• Usa palabras clave del módulo o área (p. ej., “LOM”, “CONTRATO”).</li>
-              <li>• Prueba con el ID o número de caso si lo conoces.</li>
-              <li>• La IA sugiere pasos; valida con procedimientos internos.</li>
-            </ul>
-          )}
+          <ul className="mt-3 text-xs text-slate-700 space-y-1">
+            <li>• Usa palabras clave del módulo o área (p. ej., “LOM”, “CONTRATO”).</li>
+            <li>• Prueba con el ID o número de caso si lo conoces.</li>
+            <li>• La IA sugiere pasos; valida con procedimientos internos.</li>
+          </ul>
         </aside>
       )}
     </main>
