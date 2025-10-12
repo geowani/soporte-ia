@@ -87,14 +87,16 @@ export default function Resultados() {
     return t.replace(/\n{3,}/g, "\n\n").trim();
   }
 
-  // === Eliminar emojis ===
+  // === Eliminar emojis (seguro) ===
   function removeEmojis(text) {
     if (!text) return "";
-    // Rango amplio de pictogramas + variantes (FE0F) y banderas
-    return text.replace(
-      /([\u2700-\u27BF]|[\uE000-\uF8FF]|[\u1F300-\u1F6FF]|[\u1F900-\u1F9FF]|[\u1F1E6-\u1F1FF]|[\u2600-\u26FF]|\uFE0F)/g,
-      ""
-    );
+    try {
+      // Elimina solo pictogramas (emojis), dejando texto y signos intactos
+      return text.replace(/\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?/gu, "");
+    } catch {
+      // Fallback por si el navegador no soporta \p{}: quitamos algunos comunes
+      return text.replace(/[💡✅⚠️🔧🔍✨🔁📌📎🧹🚫🔥⭐️]/g, "");
+    }
   }
 
   // === Buscar en BD ===
@@ -154,7 +156,7 @@ export default function Resultados() {
 
       let answer = cleanMarkdown(data?.answer || "");
       answer = stripDbSummaryBlocks(answer);
-      answer = removeEmojis(answer); // <-- sin emojis
+      // ⚠️ NO quitamos emojis aquí; solo al render para evitar sobre-filtro
       setAiResult({ answer });
     } catch (e) {
       setAiError(e?.message || "Error generando respuesta");
@@ -296,7 +298,7 @@ export default function Resultados() {
                   <div className="font-semibold mb-2 text-slate-900">
                     Respuesta generada con inteligencia artificial:
                   </div>
-                  {removeEmojis(aiResult.answer) || (
+                  {removeEmojis(cleanMarkdown(stripDbSummaryBlocks(aiResult.answer))) || (
                     <span className="text-slate-600 italic">
                       No se generó texto. Intenta de nuevo.
                     </span>
