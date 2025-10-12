@@ -86,21 +86,13 @@ export default function Resultados() {
     return t;
   }
 
-  // 🔥 Filtro extra para borrar textos tipo "Encontré casos..." de la IA
+  // 🔒 Filtro extra para borrar textos tipo "Encontré casos..." de la IA
   function stripDbSummaryBlocks(txt) {
     if (!txt) return "";
     let t = String(txt);
-
-    // Quita el bloque que inicia con "Encontré casos relacionados..." hasta "Resumen:" (si existe)
     t = t.replace(/Encontr[ée]\s+casos\s+relacionados[\s\S]*?(?:Resumen:[^\n]*\n?)?/i, "");
-
-    // Quita "Sugerencia principal: ..."
     t = t.replace(/Sugerencia\s+principal:[^\n]*\n?/i, "");
-
-    // Quita líneas de ranking tipo "- #1 ...", "- #2 ..."
-    t = t.replace(/^\s*-\s*#\d+.*$/gmi, "");
-
-    // Compacta espacios
+    t = t.replace(/^\s*-\s*#\d+.*$/gmi, ""); // rankings
     t = t.replace(/\n{3,}/g, "\n\n").trim();
     return t;
   }
@@ -262,104 +254,124 @@ export default function Resultados() {
           </button>
         </div>
 
-        {/* Resultados */}
-        <div className="mt-5 w-full max-w-4xl rounded-2xl bg-slate-200/85 text-slate-900 p-5 md:p-6 border border-white/20 shadow-[0_20px_60px_rgba(0,0,0,.35)]">
-          <div className="flex items-center justify-between mb-3">
-            <div className="font-bold text-lg">Resultados:</div>
-            {total > 0 && (
-              <div className="text-sm text-slate-700">
-                {total} coincidencia{total === 1 ? "" : "s"}
+        {/* Resultados + Panel IA (grid) */}
+        <div className="mt-5 w-full max-w-6xl grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 items-start">
+          {/* COLUMNA IZQUIERDA: LISTA DE CASOS */}
+          <div className="rounded-2xl bg-slate-200/85 text-slate-900 p-5 md:p-6 border border-white/20 shadow-[0_20px_60px_rgba(0,0,0,.35)]">
+            <div className="flex items-center justify-between mb-3">
+              <div className="font-bold text-lg">Resultados:</div>
+              {total > 0 && (
+                <div className="text-sm text-slate-700">
+                  {total} coincidencia{total === 1 ? "" : "s"}
+                </div>
+              )}
+            </div>
+
+            {!!error && (
+              <div className="text-red-700 bg-red-100/70 border border-red-300 rounded-md px-3 py-2 mb-3">
+                {error}
+              </div>
+            )}
+
+            {!!emptyMessage && (
+              <div className="text-slate-700">{emptyMessage}</div>
+            )}
+
+            {loading && (
+              <div className="text-slate-700 animate-pulse">Buscando…</div>
+            )}
+
+            {/* Lista detallada desde SP (BD primero y principal) */}
+            {!loading && !error && items?.length > 0 && (
+              <div className="max-h-[60vh] overflow-y-auto pr-2">
+                {items.map((c, i) => {
+                  const idCaso = c.id_caso ?? c.id ?? c.numero_caso ?? 0;
+                  const numero = c.numero_caso ?? "";
+                  const area = c.departamento ?? "";
+                  const asunto = c.asunto ?? "";
+                  const descripcion = c.descripcion ?? "";
+
+                  return (
+                    <div key={`${idCaso}-${i}`} className="py-3">
+                      <div className="flex items-start justify-between">
+                        <button
+                          onClick={() =>
+                            navigate(`/caso/${idCaso}`, { state: { fromQ: q, row: c } })
+                          }
+                          className="text-blue-600 font-bold hover:underline text-left"
+                          title={asunto || "Ver detalle"}
+                        >
+                          Caso: {numero || idCaso}
+                        </button>
+                        <span className="text-blue-600 font-semibold">
+                          {area || "—"}
+                        </span>
+                      </div>
+
+                      <div className="text-slate-800 mt-1">
+                        {asunto && <span className="font-semibold">{asunto}. </span>}
+                        <span className="text-blue-600">
+                          Descripción: {descripcion}
+                        </span>
+                      </div>
+
+                      {i < items.length - 1 && (
+                        <div className="mt-3 h-px bg-slate-500/60 w-full"></div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
 
-          {!!error && (
-            <div className="text-red-700 bg-red-100/70 border border-red-300 rounded-md px-3 py-2 mb-3">
-              {error}
-            </div>
-          )}
+          {/* COLUMNA DERECHA: ASIDE IA */}
+          {q.trim() && (
+            <aside
+              className={[
+                "rounded-2xl p-4 border shadow-[0_12px_40px_rgba(0,0,0,.25)]",
+                "bg-white/80 text-slate-900 border-white/30",
+                "sticky top-20 self-start",
+                (!loading && !error && items?.length === 0) ? "ring-2 ring-sky-400" : ""
+              ].join(" ")}
+              aria-label="Asistencia con IA"
+            >
+              <div className="font-semibold text-base mb-1">
+                {items?.length === 0 ? "¿No encontraste lo que buscabas?" : "¿Necesitas más contexto?"}
+              </div>
+              <p className="text-sm mb-3">
+                Generar una respuesta con IA para: <b>“{q}”</b>
+              </p>
 
-          {!!emptyMessage && (
-            <div className="text-slate-700">{emptyMessage}</div>
-          )}
+              <button
+                className="w-full px-3 py-2 rounded bg-slate-800 text-white hover:bg-slate-900 disabled:opacity-60"
+                onClick={generateAi}
+                disabled={aiLoading}
+              >
+                {aiLoading ? "Generando…" : "Generar con IA"}
+              </button>
 
-          {loading && (
-            <div className="text-slate-700 animate-pulse">Buscando…</div>
-          )}
-
-          {/* Lista detallada desde SP (BD primero y principal) */}
-          {!loading && !error && items?.length > 0 && (
-            <div className="max-h-[60vh] overflow-y-auto pr-2">
-              {items.map((c, i) => {
-                const idCaso = c.id_caso ?? c.id ?? c.numero_caso ?? 0;
-                const numero = c.numero_caso ?? "";
-                const area = c.departamento ?? "";
-                const asunto = c.asunto ?? "";
-                const descripcion = c.descripcion ?? "";
-
-                return (
-                  <div key={`${idCaso}-${i}`} className="py-3">
-                    <div className="flex items-start justify-between">
-                      <button
-                        onClick={() =>
-                          navigate(`/caso/${idCaso}`, { state: { fromQ: q, row: c } })
-                        }
-                        className="text-blue-600 font-bold hover:underline text-left"
-                        title={asunto || "Ver detalle"}
-                      >
-                        Caso: {numero || idCaso}
-                      </button>
-                      <span className="text-blue-600 font-semibold">
-                        {area || "—"}
-                      </span>
-                    </div>
-
-                    <div className="text-slate-800 mt-1">
-                      {asunto && <span className="font-semibold">{asunto}. </span>}
-                      <span className="text-blue-600">
-                        Descripción: {descripcion}
-                      </span>
-                    </div>
-
-                    {i < items.length - 1 && (
-                      <div className="mt-3 h-px bg-slate-500/60 w-full"></div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Sin resultados → CTA de IA */}
-          {!loading && !error && items?.length === 0 && q.trim() && (
-            <section className="p-4 rounded-md bg-white/70 border border-slate-300 mt-2">
-              {!aiResult && (
-                <>
-                  <h2 className="font-semibold mb-1">No encontramos coincidencias</h2>
-                  <p className="text-sm mb-3">
-                    ¿Te gustaría que genere una respuesta con inteligencia artificial para: <b>“{q}”</b>?
-                  </p>
-                  <button
-                    className="px-3 py-2 rounded bg-slate-800 text-white hover:bg-slate-900 disabled:opacity-60"
-                    onClick={generateAi}
-                    disabled={aiLoading}
-                  >
-                    {aiLoading ? "Generando…" : "Sí, generar con IA"}
-                  </button>
-                  {!!aiError && (
-                    <div className="text-red-700 bg-red-100/70 border border-red-300 rounded-md px-3 py-2 mt-3">
-                      {aiError}
-                    </div>
-                  )}
-                </>
+              {!!aiError && (
+                <div className="mt-3 text-red-700 bg-red-100/70 border border-red-300 rounded-md px-3 py-2">
+                  {aiError}
+                </div>
               )}
 
               {aiResult && (
-                <div className="mt-2 whitespace-pre-wrap leading-relaxed">
+                <div className="mt-3 max-h-[50vh] overflow-auto pr-1 whitespace-pre-wrap leading-relaxed text-sm">
                   {cleanMarkdown(stripDbSummaryBlocks(aiResult.answer))}
                 </div>
               )}
-            </section>
+
+              {/* Tips sutiles (opcional) */}
+              {!aiResult && (
+                <ul className="mt-3 text-xs text-slate-700 space-y-1">
+                  <li>• Usa palabras clave del módulo o área (p. ej., “LOM”, “CONTRATO”).</li>
+                  <li>• Prueba con el ID o número de caso si lo conoces.</li>
+                  <li>• La IA sugiere pasos; valida con procedimientos internos.</li>
+                </ul>
+              )}
+            </aside>
           )}
         </div>
       </div>
