@@ -231,7 +231,7 @@ export default function Resultados() {
         className={[
           "mt-6 px-4 w-full flex flex-col items-center transition-[padding] duration-200",
           // cuando el aside está visible, damos espacio a la derecha para que no se solape
-          showAsideIA ? "lg:pr-[360px]" : ""
+          showAsideIA ? "lg:pr-[300px]" : ""
         ].join(" ")}
       >
         {/* Buscador */}
