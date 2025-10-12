@@ -86,6 +86,25 @@ export default function Resultados() {
     return t;
   }
 
+  // 🔥 Filtro extra para borrar textos tipo "Encontré casos..." de la IA
+  function stripDbSummaryBlocks(txt) {
+    if (!txt) return "";
+    let t = String(txt);
+
+    // Quita el bloque que inicia con "Encontré casos relacionados..." hasta "Resumen:" (si existe)
+    t = t.replace(/Encontr[ée]\s+casos\s+relacionados[\s\S]*?(?:Resumen:[^\n]*\n?)?/i, "");
+
+    // Quita "Sugerencia principal: ..."
+    t = t.replace(/Sugerencia\s+principal:[^\n]*\n?/i, "");
+
+    // Quita líneas de ranking tipo "- #1 ...", "- #2 ..."
+    t = t.replace(/^\s*-\s*#\d+.*$/gmi, "");
+
+    // Compacta espacios
+    t = t.replace(/\n{3,}/g, "\n\n").trim();
+    return t;
+  }
+
   // ========= 1) Buscar en BD primero (sin IA automática) =========
   const runSearch = useCallback(async (term) => {
     const texto = String(term ?? "").trim();
@@ -146,8 +165,12 @@ export default function Resultados() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Error generando respuesta");
-      // Solo nos interesa mostrar la respuesta generada
-      const answer = cleanMarkdown(data?.answer || "");
+
+      // 1) Limpia markdown
+      let answer = cleanMarkdown(data?.answer || "");
+      // 2) Elimina bloques "Encontré casos..." / "Sugerencia principal" / rankings
+      answer = stripDbSummaryBlocks(answer);
+
       setAiResult({ answer });
     } catch (e) {
       setAiError(e?.message || "Error generando respuesta");
@@ -333,7 +356,7 @@ export default function Resultados() {
 
               {aiResult && (
                 <div className="mt-2 whitespace-pre-wrap leading-relaxed">
-                  {cleanMarkdown(aiResult.answer)}
+                  {cleanMarkdown(stripDbSummaryBlocks(aiResult.answer))}
                 </div>
               )}
             </section>
