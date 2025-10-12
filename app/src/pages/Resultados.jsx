@@ -87,14 +87,25 @@ export default function Resultados() {
     return t.replace(/\n{3,}/g, "\n\n").trim();
   }
 
+  // === Quitar el encabezado duplicado que a veces viene en la respuesta de IA ===
+  function stripAiSelfHeader(txt) {
+    if (!txt) return "";
+    const lines = String(txt).split(/\r?\n/);
+    // Si la primera línea es "Respuesta generada con inteligencia artificial:" (con o sin dos puntos)
+    if (lines.length && /^\s*respuesta\s+generada\s+con\s+inteligencia\s+artificial:?\s*$/i.test(lines[0])) {
+      lines.shift();
+      // Quita líneas vacías iniciales tras remover el encabezado
+      while (lines.length && /^\s*$/.test(lines[0])) lines.shift();
+    }
+    return lines.join("\n");
+  }
+
   // === Eliminar emojis (seguro) ===
   function removeEmojis(text) {
     if (!text) return "";
     try {
-      // Elimina solo pictogramas (emojis), dejando texto y signos intactos
       return text.replace(/\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?/gu, "");
     } catch {
-      // Fallback por si el navegador no soporta \p{}: quitamos algunos comunes
       return text.replace(/[💡✅⚠️🔧🔍✨🔁📌📎🧹🚫🔥⭐️]/g, "");
     }
   }
@@ -156,7 +167,6 @@ export default function Resultados() {
 
       let answer = cleanMarkdown(data?.answer || "");
       answer = stripDbSummaryBlocks(answer);
-      // ⚠️ NO quitamos emojis aquí; solo al render para evitar sobre-filtro
       setAiResult({ answer });
     } catch (e) {
       setAiError(e?.message || "Error generando respuesta");
@@ -298,7 +308,13 @@ export default function Resultados() {
                   <div className="font-semibold mb-2 text-slate-900">
                     Respuesta generada con inteligencia artificial:
                   </div>
-                  {removeEmojis(cleanMarkdown(stripDbSummaryBlocks(aiResult.answer))) || (
+                  {removeEmojis(
+                    stripAiSelfHeader(
+                      cleanMarkdown(
+                        stripDbSummaryBlocks(aiResult.answer)
+                      )
+                    )
+                  ) || (
                     <span className="text-slate-600 italic">
                       No se generó texto. Intenta de nuevo.
                     </span>
