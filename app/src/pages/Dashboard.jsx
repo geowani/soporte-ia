@@ -118,7 +118,7 @@ export default function Dashboard({ onLogout }) {
               <input
                 className="flex-1 bg-transparent px-5 py-3 text-slate-900 placeholder:text-slate-600 outline-none"
                 type="text"
-                placeholder="Busca por caso, título, error"
+                placeholder="Busca por caso, título o error"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
               />
