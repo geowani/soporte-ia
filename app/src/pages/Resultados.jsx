@@ -11,13 +11,17 @@ export default function Resultados() {
   const urlQ = new URLSearchParams(location.search).get("q") || "";
   const [q, setQ] = useState(urlQ);
 
-  // Estados principales
-  const [result, setResult] = useState(null); // { mode, answer, casoSugeridoId, ... }
+  // ===== Estados principales =====
   const [items, setItems] = useState([]);     // lista cuando hay BD
   const [total, setTotal] = useState(0);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // ===== IA bajo demanda (solo si no hay BD) =====
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
+  const [aiResult, setAiResult] = useState(null); // { answer }
 
   // Lleva control del último término ya registrado para evitar dobles/omisiones
   const lastRegisteredRef = useRef(null);
@@ -61,69 +65,45 @@ export default function Resultados() {
   // Limpia/normaliza markdown y respeta listas numeradas / viñetas con separación visual
   function cleanMarkdown(s) {
     if (!s) return "";
-
-    // 1) Limpiar formatos de markdown
     let t = String(s)
-      // Bloques ``` ```
       .replace(/```[\s\S]*?```/g, (m) => m.replace(/```/g, ""))
-      // Inline code `
       .replace(/`([^`]+)`/g, "$1")
-      // **negritas** / __negritas__
       .replace(/\*\*(.*?)\*\*/g, "$1")
       .replace(/__(.*?)__/g, "$1")
-      // _itálicas_
       .replace(/_(.*?)_/g, "$1")
-      // # títulos
       .replace(/^#{1,6}\s*/gm, "");
-
-    // 2) Normalizar listas y añadir separación entre ítems
     const lines = t.split(/\r?\n/);
     const out = [];
-
     for (let i = 0; i < lines.length; i++) {
       let L = lines[i].trimEnd();
-
-      // ¿Lista numerada? "1. " o "1) "
       const isNumbered = /^\s*\d+[\.\)]\s+/.test(L);
-
-      // ¿Viñeta? -, *, • al inicio => convertir a "- "
       const isBullet = /^\s*[-*•]\s+/.test(L);
-      if (isBullet) {
-        L = L.replace(/^\s*[-*•]\s+/, "- ");
-      }
-
-      // Si es un ítem (numerado o viñeta), inserta línea en blanco antes (si procede)
-      if ((isNumbered || isBullet) && out.length && out[out.length - 1] !== "") {
-        out.push("");
-      }
-
+      if (isBullet) L = L.replace(/^\s*[-*•]\s+/, "- ");
+      if ((isNumbered || isBullet) && out.length && out[out.length - 1] !== "") out.push("");
       out.push(L);
     }
-
-    // 3) Compactar saltos de línea excesivos
-    t = out.join("\n")
-      .replace(/\n{3,}/g, "\n\n")
-      .trim();
-
+    t = out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
     return t;
   }
 
-  // Ejecuta búsqueda integral (AI + listado BD si aplica)
+  // ========= 1) Buscar en BD primero (sin IA automática) =========
   const runSearch = useCallback(async (term) => {
     const texto = String(term ?? "").trim();
     if (!texto) {
-      setResult(null);
       setItems([]);
       setTotal(0);
       setError("");
+      setAiResult(null);
+      setAiError("");
       return;
     }
 
     setLoading(true);
     setError("");
-    setResult(null);
     setItems([]);
     setTotal(0);
+    setAiResult(null);
+    setAiError("");
 
     try {
       // registra si aún no se ha registrado este término
@@ -132,7 +112,30 @@ export default function Resultados() {
         lastRegisteredRef.current = texto;
       }
 
-      // 1) Consulta unificada (BD o IA)
+      // Solo BD
+      const r = await buscarCasos({ q: texto, page: 1, pageSize: 20 });
+      const arr = r.items || [];
+      setItems(arr);
+      setTotal(r.total ?? arr.length);
+    } catch (e) {
+      setError(e?.message || "Error al buscar casos");
+      setItems([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // ========= 2) IA on-demand (click del usuario) =========
+  const generateAi = useCallback(async () => {
+    const texto = q.trim();
+    if (!texto) return;
+
+    setAiLoading(true);
+    setAiError("");
+    setAiResult(null);
+
+    try {
       const res = await fetch("/api/ai-answer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -141,31 +144,18 @@ export default function Resultados() {
           userId: getUserId() ?? 0,
         }),
       });
-
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Error en la búsqueda");
-      setResult(data);
-
-      // 2) Si vino de BD, muestra la lista detallada como antes
-      if (data?.mode === "db") {
-        const r = await buscarCasos({ q: texto, page: 1, pageSize: 20 });
-        const arr = r.items || [];
-        setItems(arr);
-        setTotal(r.total ?? arr.length);
-      } else {
-        // IA → lista vacía (mostramos solo la respuesta IA)
-        setItems([]);
-        setTotal(0);
-      }
+      if (!res.ok) throw new Error(data?.error || "Error generando respuesta");
+      // Solo nos interesa mostrar la respuesta generada
+      const answer = cleanMarkdown(data?.answer || "");
+      setAiResult({ answer });
     } catch (e) {
-      setError(e?.message || "Error al buscar casos");
-      setResult(null);
-      setItems([]);
-      setTotal(0);
+      setAiError(e?.message || "Error generando respuesta");
+      setAiResult(null);
     } finally {
-      setLoading(false);
+      setAiLoading(false);
     }
-  }, []);
+  }, [q]);
 
   // Carga resultados cuando cambia ?q=
   useEffect(() => {
@@ -188,12 +178,10 @@ export default function Resultados() {
   // Mensajes derivados
   const emptyMessage = useMemo(() => {
     if (!q.trim()) return "Escribe un término para buscar.";
-    if (loading) return "";
-    if (error) return "";
-    if (result?.mode === "ai") return ""; // hay respuesta IA
-    if ((items?.length || 0) === 0) return `Sin coincidencias para “${q}”.`;
+    if (loading || error) return "";
+    if ((items?.length || 0) === 0 && !aiResult) return `Sin coincidencias para “${q}”.`;
     return "";
-  }, [q, loading, error, items, result]);
+  }, [q, loading, error, items, aiResult]);
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
@@ -276,28 +264,8 @@ export default function Resultados() {
             <div className="text-slate-700 animate-pulse">Buscando…</div>
           )}
 
-          {/* Bloque de respuesta (IA o BD) sin markdown y SIN badge */}
-          {!loading && !error && result?.mode && (
-            <div className="mb-4">
-              <div className="whitespace-pre-wrap leading-relaxed">
-                {cleanMarkdown(result.answer)}
-              </div>
-
-              {result.mode === "db" && !!result.casoSugeridoId && (
-                <div className="mt-3">
-                  <button
-                    className="px-3 py-1.5 rounded-md bg-slate-800 text-white text-sm hover:bg-slate-900"
-                    onClick={() => navigate(`/caso/${result.casoSugeridoId}`)}
-                  >
-                    Ver detalle del caso
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Lista detallada desde SP (solo cuando hubo BD) */}
-          {!loading && !error && result?.mode === "db" && items?.length > 0 && (
+          {/* Lista detallada desde SP (BD primero y principal) */}
+          {!loading && !error && items?.length > 0 && (
             <div className="max-h-[60vh] overflow-y-auto pr-2">
               {items.map((c, i) => {
                 const idCaso = c.id_caso ?? c.id ?? c.numero_caso ?? 0;
@@ -337,6 +305,38 @@ export default function Resultados() {
                 );
               })}
             </div>
+          )}
+
+          {/* Sin resultados → CTA de IA */}
+          {!loading && !error && items?.length === 0 && q.trim() && (
+            <section className="p-4 rounded-md bg-white/70 border border-slate-300 mt-2">
+              {!aiResult && (
+                <>
+                  <h2 className="font-semibold mb-1">No encontramos coincidencias</h2>
+                  <p className="text-sm mb-3">
+                    ¿Te gustaría que genere una respuesta con inteligencia artificial para: <b>“{q}”</b>?
+                  </p>
+                  <button
+                    className="px-3 py-2 rounded bg-slate-800 text-white hover:bg-slate-900 disabled:opacity-60"
+                    onClick={generateAi}
+                    disabled={aiLoading}
+                  >
+                    {aiLoading ? "Generando…" : "Sí, generar con IA"}
+                  </button>
+                  {!!aiError && (
+                    <div className="text-red-700 bg-red-100/70 border border-red-300 rounded-md px-3 py-2 mt-3">
+                      {aiError}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {aiResult && (
+                <div className="mt-2 whitespace-pre-wrap leading-relaxed">
+                  {cleanMarkdown(aiResult.answer)}
+                </div>
+              )}
+            </section>
           )}
         </div>
       </div>
