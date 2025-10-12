@@ -12,7 +12,7 @@ export default function Resultados() {
   const [q, setQ] = useState(urlQ);
 
   // ===== Estados principales =====
-  const [items, setItems] = useState([]);     // lista cuando hay BD
+  const [items, setItems] = useState([]); // lista cuando hay BD
   const [total, setTotal] = useState(0);
 
   const [loading, setLoading] = useState(false);
@@ -60,7 +60,9 @@ export default function Resultados() {
   }
 
   // Mantén input sincronizado si cambia la URL
-  useEffect(() => { setQ(urlQ); }, [urlQ]);
+  useEffect(() => {
+    setQ(urlQ);
+  }, [urlQ]);
 
   // Limpia/normaliza markdown y respeta listas numeradas / viñetas con separación visual
   function cleanMarkdown(s) {
@@ -92,7 +94,7 @@ export default function Resultados() {
     let t = String(txt);
     t = t.replace(/Encontr[ée]\s+casos\s+relacionados[\s\S]*?(?:Resumen:[^\n]*\n?)?/i, "");
     t = t.replace(/Sugerencia\s+principal:[^\n]*\n?/i, "");
-    t = t.replace(/^\s*-\s*#\d+.*$/gmi, ""); // rankings
+    t = t.replace(/^\s*-\s*#\d+.*$/gmi, "");
     t = t.replace(/\n{3,}/g, "\n\n").trim();
     return t;
   }
@@ -185,6 +187,11 @@ export default function Resultados() {
     navigate(`/resultados?q=${encodeURIComponent(term)}`, { replace: true });
   }, [q, navigate]);
 
+  // Mostrar panel IA solo cuando NO hay resultados y hay texto
+  const showAsideIA = useMemo(() => {
+    return q.trim() && !loading && !error && (items?.length || 0) === 0;
+  }, [q, loading, error, items]);
+
   // Mensajes derivados
   const emptyMessage = useMemo(() => {
     if (!q.trim()) return "Escribe un término para buscar.";
@@ -220,7 +227,13 @@ export default function Resultados() {
       </div>
 
       {/* Contenido */}
-      <div className="mt-6 px-4 w-full flex flex-col items-center">
+      <div
+        className={[
+          "mt-6 px-4 w-full flex flex-col items-center transition-[padding] duration-200",
+          // cuando el aside está visible, damos espacio a la derecha para que no se solape
+          showAsideIA ? "lg:pr-[360px]" : ""
+        ].join(" ")}
+      >
         {/* Buscador */}
         <div className="w-full max-w-3xl flex items-center rounded-full bg-white/85 text-slate-900 overflow-hidden shadow-inner shadow-black/10">
           <input
@@ -249,7 +262,7 @@ export default function Resultados() {
           </button>
         </div>
 
-        {/* CONTENEDOR PRINCIPAL: SOLO LA CARD DE RESULTADOS */}
+        {/* CARD DE RESULTADOS */}
         <div className="mt-5 w-full max-w-4xl rounded-2xl bg-slate-200/85 text-slate-900 p-5 md:p-6 border border-white/20 shadow-[0_20px_60px_rgba(0,0,0,.35)]">
           <div className="flex items-center justify-between mb-3">
             <div className="font-bold text-lg">Resultados:</div>
@@ -317,12 +330,10 @@ export default function Resultados() {
             </div>
           )}
 
-          {/* PANEL IA — versión móvil/tablet (debajo) */}
-          {q.trim() && (
+          {/* En móvil, si NO hay resultados, mostramos el CTA adentro */}
+          {showAsideIA && (
             <section className="lg:hidden mt-5 p-4 rounded-md bg-white/70 border border-slate-300">
-              <div className="font-semibold mb-1">
-                {items?.length === 0 ? "¿No encontraste lo que buscabas?" : "¿Necesitas más contexto?"}
-              </div>
+              <div className="font-semibold mb-1">¿No encontraste lo que buscabas?</div>
               <p className="text-sm mb-3">
                 Generar una respuesta con IA para: <b>“{q}”</b>
               </p>
@@ -347,26 +358,22 @@ export default function Resultados() {
           )}
         </div>
 
-        {/* ESPACIADOR para que el aside fijo no tape el footer visualmente */}
         <div className="h-10" />
       </div>
 
-      {/* PANEL IA — fijo a la derecha en pantallas grandes */}
-      {q.trim() && (
+      {/* PANEL IA — fijo a la derecha SOLO cuando NO hay resultados (como en tu segunda imagen) */}
+      {showAsideIA && (
         <aside
           className={[
             "hidden lg:block fixed right-6 z-40",
-            // Ajusta 'top' si quieres subir/bajar el panel relativo al header/buscador
-            "top-[180px]",
+            "top-[180px]", // ajusta si lo quieres más arriba/abajo
             "w-[320px] rounded-2xl p-4 border shadow-[0_12px_40px_rgba(0,0,0,.25)]",
             "bg-white/80 text-slate-900 border-white/30",
-            (!loading && !error && items?.length === 0) ? "ring-2 ring-sky-400" : ""
+            "ring-2 ring-sky-400"
           ].join(" ")}
           aria-label="Asistencia con IA"
         >
-          <div className="font-semibold text-base mb-1">
-            {items?.length === 0 ? "¿No encontraste lo que buscabas?" : "¿Necesitas más contexto?"}
-          </div>
+          <div className="font-semibold text-base mb-1">¿No encontraste lo que buscabas?</div>
           <p className="text-sm mb-3">
             Generar una respuesta con IA para: <b>“{q}”</b>
           </p>
