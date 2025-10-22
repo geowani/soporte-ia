@@ -1,4 +1,4 @@
-// api/ai-answer/index.js  (CommonJS + Gemini v1 con autodetección de modelo)
+// api/ai-answer/index.js  (CommonJS + Gemini v1 con autodetección de modelo + continuación)
 const sql = require('mssql');
 
 /* ------------------ SQL: parsear cadena ADO.NET ------------------ */
@@ -24,53 +24,26 @@ function parseConnStr(connStr = "") {
 
 const sqlConfig = parseConnStr(process.env.SQL_CONN_STR || "");
 
-/* ------------------ IA: Gemini (3 alternativas concisas, API v1 con autodetección) ------------------ */
-async function askGemini(q) {
-  const key = (process.env.GEMINI_API_KEY || "").trim();
-  if (!key) return "[Gemini] Falta GEMINI_API_KEY";
+/* ------------------ IA: Gemini (3 alternativas concisas, con sentinela y continuación) ------------------ */
 
-  // 0) Lista modelos disponibles para tu key
-  let available = [];
-  try {
-    const list = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${encodeURIComponent(key)}`);
-    if (list.ok) {
-      const data = await list.json();
-      available = Array.isArray(data.models) ? data.models.map(m => m.name) : [];
-    }
-  } catch (_) { /* ignore listing errors */ }
+const MODELS_PREFERRED = [
+  "models/gemini-2.5-flash-latest",
+  "models/gemini-2.5-flash",
+  "models/gemini-2.5-pro-latest",
+  "models/gemini-2.5-pro",
+  "models/gemini-1.5-flash-latest",
+  "models/gemini-1.5-flash",
+  "models/gemini-1.5-pro-latest",
+  "models/gemini-1.5-pro"
+];
 
-  // 1) Construye candidatos (preferimos 2.5 flash → 2.5 pro → 1.5 flash → 1.5 pro)
-  const prefer = [
-    "models/gemini-2.5-flash-latest",
-    "models/gemini-2.5-flash",
-    "models/gemini-2.5-pro-latest",
-    "models/gemini-2.5-pro",
-    "models/gemini-1.5-flash-latest",
-    "models/gemini-1.5-flash",
-    "models/gemini-1.5-pro-latest",
-    "models/gemini-1.5-pro"
-  ];
+const TEMP = 0.2;
+const MAX_OUTPUT_TOKENS_FIRST = 1200; // antes 600
+const MAX_OUTPUT_TOKENS_CONT  = 800;
+const MAX_CONTINUATIONS       = 2;    // número de “continúa…” si vino cortado
 
-  const fromList = [
-    ...available.filter(n => /gemini\-2\.5.*flash/i.test(n)),
-    ...available.filter(n => /gemini\-2\.5.*pro/i.test(n)),
-    ...available.filter(n => /gemini\-1\.5.*flash/i.test(n)),
-    ...available.filter(n => /gemini\-1\.5.*pro/i.test(n)),
-  ];
-
-  const seen = new Set();
-  const candidates = [...fromList, ...prefer].filter(n => {
-    if (!n) return false;
-    if (seen.has(n)) return false;
-    seen.add(n); return true;
-  });
-
-  if (candidates.length === 0) {
-    return "[Gemini] No hay modelos disponibles para esta API key (endpoint /v1/models vacío).";
-  }
-
-  // 2) Prompt para EXACTAMENTE 3 alternativas concisas
-  const prompt = `Eres un asistente de soporte técnico.
+function buildPrompt(q) {
+  return `Eres un asistente de soporte técnico.
 No hubo resultados en la base de datos para: "${q}".
 Responde con pasos claros, breves y accionables, en formato de lista numerada o viñetas.
 No incluyas frases de cierre como "háznoslo saber", "contáctame", "puedo ayudarte más" ni invitaciones a interacción humana. 
@@ -97,54 +70,145 @@ FORMATO ESTRICTO:
 3) <título corto>
 - paso 1
 - paso 2
-- paso 3`;
+- paso 3
 
+Al terminar, escribe exactamente [[END]].`;
+}
+
+function buildContinuationPrompt(soFar) {
+  return `Sigue EXACTAMENTE donde te quedaste para completar las 3 alternativas.
+No repitas texto ya dado. Mantén el mismo formato y termina con [[END]].
+Texto hasta ahora:
+${soFar}`;
+}
+
+function isComplete(txt = "") {
+  return /\n?\s*3\)\s/.test(txt) && /\[\[END\]\]\s*$/.test(txt);
+}
+function stripEnd(txt = "") {
+  return txt.replace(/\s*\[\[END\]\]\s*$/, "").trim();
+}
+
+async function listModels(key) {
+  try {
+    const list = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${encodeURIComponent(key)}`);
+    if (!list.ok) return [];
+    const data = await list.json();
+    return Array.isArray(data.models) ? data.models.map(m => m.name) : [];
+  } catch {
+    return [];
+  }
+}
+
+function orderCandidates(available) {
+  const fromList = [
+    ...available.filter(n => /gemini\-2\.5.*flash/i.test(n)),
+    ...available.filter(n => /gemini\-2\.5.*pro/i.test(n)),
+    ...available.filter(n => /gemini\-1\.5.*flash/i.test(n)),
+    ...available.filter(n => /gemini\-1\.5.*pro/i.test(n)),
+  ];
+  const seen = new Set();
+  return [...fromList, ...MODELS_PREFERRED].filter(n => {
+    if (!n) return false;
+    if (seen.has(n)) return false;
+    seen.add(n);
+    return true;
+  });
+}
+
+function extractText(data) {
+  try {
+    const parts = data?.candidates?.[0]?.content?.parts || [];
+    return parts.map(p => p?.text || "").join("\n");
+  } catch {
+    return "";
+  }
+}
+
+async function callGemini({ apiKey, modelName, prompt, maxTokens }) {
+  const url = `https://generativelanguage.googleapis.com/v1/${modelName}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const body = {
     contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature: 0.2,      // más conciso/estable
-      maxOutputTokens: 600   // suficiente para 3 alternativas compactas
-    }
+    generationConfig: { temperature: TEMP, maxOutputTokens: maxTokens }
   };
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (!resp.ok) {
+    const msg = await resp.text().catch(() => "");
+    throw new Error(`Gemini HTTP ${resp.status}: ${msg.slice(0, 800)}`);
+  }
+  const data = await resp.json();
+  return (extractText(data) || "").trim();
+}
 
-  // 3) Prueba candidatos hasta que uno funcione
+/** Un solo disparo (elige el primer modelo que funcione) */
+async function askGeminiOnce(q, key, available) {
+  const prompt = buildPrompt(q);
+  const candidates = orderCandidates(available);
   let lastErr = null;
 
   for (const modelName of candidates) {
     try {
-      const url = `https://generativelanguage.googleapis.com/v1/${modelName}:generateContent?key=${encodeURIComponent(key)}`;
-      const resp = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
+      const txt = await callGemini({
+        apiKey: key,
+        modelName,
+        prompt,
+        maxTokens: MAX_OUTPUT_TOKENS_FIRST
       });
-
-      if (!resp.ok) {
-        lastErr = `[Gemini ${resp.status}] ${(await resp.text()).slice(0, 800)}`;
-        // 404/400 por modelo no soportado → intenta el siguiente candidato
-        continue;
-      }
-
-      const data = await resp.json();
-      const txt =
-        data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-        (data?.candidates?.[0]?.content?.parts || []).map(p => p?.text || "").join("\n");
-
-      if (txt && txt.trim()) return txt;
+      if (txt) return txt;
       lastErr = "[Gemini] respuesta vacía";
     } catch (e) {
-      lastErr = `[Gemini ex] ${e?.message || e}`;
+      lastErr = String(e?.message || e);
+      // intenta siguiente modelo
     }
   }
+  return lastErr || "[Gemini] sin respuesta";
+}
 
-  const hint = available.length ? ` Modelos detectados: ${available.slice(0,8).join(", ")}` : "";
-  return `${lastErr || "[Gemini] sin respuesta"}${hint}`;
+/** Wrapper con continuación si el primer tiro no llegó a [[END]] o faltó la 3) */
+async function askGeminiWithContinuation(q) {
+  const key = (process.env.GEMINI_API_KEY || "").trim();
+  if (!key) return "[Gemini] Falta GEMINI_API_KEY";
+
+  const available = await listModels(key);
+  let out = await askGeminiOnce(q, key, available);
+  if (isComplete(out)) return stripEnd(out);
+
+  // Si el primer intento vino corto (sin [[END]] o sin “3)”), pedimos continuar
+  for (let round = 0; round < MAX_CONTINUATIONS && !isComplete(out); round++) {
+    const contPrompt = buildContinuationPrompt(out);
+    const candidates = orderCandidates(available);
+    let appended = "";
+
+    for (const modelName of candidates) {
+      try {
+        appended = await callGemini({
+          apiKey: key,
+          modelName,
+          prompt: contPrompt,
+          maxTokens: MAX_OUTPUT_TOKENS_CONT
+        });
+        if (appended) break;
+      } catch {
+        // intenta el siguiente
+      }
+    }
+
+    if (appended) out = `${out}\n${appended}`.trim();
+    else break; // no se pudo agregar nada útil
+  }
+
+  return stripEnd(out);
 }
 
 /* ------------------ Handler principal ------------------ */
 module.exports = async function (context, req) {
+  const t0 = Date.now();
   try {
-    const { q, userId, forceAi } = req.body || {};
+    const { q, forceAi } = req.body || {};
     if (!q || !q.trim()) {
       context.res = { status: 400, body: { error: "Falta q" } };
       return;
@@ -152,10 +216,20 @@ module.exports = async function (context, req) {
 
     // IA directa (forzar Gemini para pruebas)
     if (forceAi === true) {
-      const ai = await askGemini(q);
+      const ai = await askGeminiWithContinuation(q);
       context.res = {
         status: 200,
-        body: { mode: "ai", query: q, casoSugeridoId: null, answer: `Respuesta generada con inteligencia artificial:\n\n${ai}` }
+        body: {
+          mode: "ai",
+          query: q,
+          casoSugeridoId: null,
+          answer: `Respuesta generada con inteligencia artificial:\n\n${ai}`,
+          debug: {
+            len: ai.length,
+            ended: /\[\[END\]\]\s*$/.test(ai),
+            ms: Date.now() - t0
+          }
+        }
       };
       return;
     }
@@ -178,7 +252,7 @@ module.exports = async function (context, req) {
       resultados = [];
     }
 
-    /* 2) Si hay resultados -> BD */
+    /* 2) Si hay resultados -> responder con BD */
     if (resultados.length > 0) {
       const top = resultados[0];
       const bullets = resultados.map((c, i) =>
@@ -202,8 +276,8 @@ Resumen: ${top.descripcion}`
       return;
     }
 
-    /* 3) Si no hay BD -> Gemini */
-    const ai = await askGemini(q);
+    /* 3) Si no hay BD -> Gemini (con continuación) */
+    const ai = await askGeminiWithContinuation(q);
     context.res = {
       status: 200,
       body: {
@@ -211,7 +285,12 @@ Resumen: ${top.descripcion}`
         query: q,
         casoSugeridoId: null,
         answer: `Respuesta generada con inteligencia artificial:\n\n${ai}`,
-        sqlError
+        sqlError,
+        debug: {
+          len: ai.length,
+          ended: /\[\[END\]\]\s*$/.test(ai),
+          ms: Date.now() - t0
+        }
       }
     };
   } catch (e) {
