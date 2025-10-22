@@ -4,22 +4,106 @@ import { useNavigate } from "react-router-dom";
 
 export default function Dashboard({ onLogout }) {
   const [q, setQ] = useState("");
+  const [nombreUsuario, setNombreUsuario] = useState("Luis Marín");
   const navigate = useNavigate();
 
-  // --- obtiene userId ---
+  // =====================
+  // Helpers de sesión
+  // =====================
+
+  // Obtiene userId (como tenías)
   function getUserId() {
     const raw = localStorage.getItem("userId");
     const id = Number(raw);
     return Number.isFinite(id) && id > 0 ? id : null;
   }
 
-  // --- cierre de sesión ---
+  // Convierte "lUiS mArIn" -> "Luis Marin"
+  function toTitleCase(s) {
+    return String(s || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\b([a-záéíóúñü])([a-záéíóúñü]*)/gi, (_, f, r) => f.toUpperCase() + r);
+  }
+
+  // Intenta armar un nombre "bonito" desde múltiples campos posibles
+  function buildName(u) {
+    if (!u || typeof u !== "object") return "";
+    const candidates = [
+      u.nombreCompleto,
+      u.nombre_completo,
+      u.fullName,
+      u.full_name,
+      u.displayName,
+      u.display_name,
+      u.nombre,
+      u.name,
+      [u.first_name, u.last_name].filter(Boolean).join(" "),
+      [u.firstName, u.lastName].filter(Boolean).join(" "),
+      [u.given_name, u.family_name].filter(Boolean).join(" "),
+      u.agenteNombre,
+      u.username, // último recurso
+    ]
+      .map((x) => (typeof x === "string" ? x.trim() : ""))
+      .filter(Boolean);
+
+    const chosen = candidates[0] || "";
+    return toTitleCase(chosen);
+  }
+
+  // Lee nombre del usuario desde localStorage/cookie
+  function getUserName() {
+    try {
+      // claves comunes
+      const raw =
+        localStorage.getItem("user") ||
+        localStorage.getItem("usuario") ||
+        localStorage.getItem("authUser") ||
+        localStorage.getItem("profile") ||
+        "";
+
+      if (raw) {
+        try {
+          const u = JSON.parse(raw);
+          const built = buildName(u);
+          if (built) return built;
+
+          // si no se pudo, intenta con email -> antes de @
+          const email = (u?.correo || u?.email || "").toString().trim();
+          if (email && email.includes("@")) {
+            const before = email.split("@")[0].replace(/[._-]+/g, " ");
+            return toTitleCase(before);
+          }
+        } catch {
+          // si estaba guardado como string plano, úsalo
+          if (raw && raw.length <= 60) return toTitleCase(raw);
+        }
+      }
+    } catch {}
+
+    // cookie user_name=...
+    const m = document.cookie.match(/(?:^|;\s*)user_name=([^;]+)/);
+    if (m) return toTitleCase(decodeURIComponent(m[1]));
+
+    return "";
+  }
+
+  // =====================
+  // Logout
+  // =====================
   const handleLogout = useCallback(() => {
+    // limpia varias claves típicas
     localStorage.removeItem("userId");
+    localStorage.removeItem("user");
+    localStorage.removeItem("usuario");
+    localStorage.removeItem("authUser");
+    localStorage.removeItem("profile");
     onLogout?.();
   }, [onLogout]);
 
-  // --- registra búsqueda (sin bloquear) ---
+  // =====================
+  // Registro de búsqueda
+  // =====================
   async function registrarBusqueda(term) {
     const userId = getUserId();
     const texto = String(term ?? "").trim();
@@ -40,7 +124,9 @@ export default function Dashboard({ onLogout }) {
     } catch {}
   }
 
-  // --- búsqueda principal ---
+  // =====================
+  // Búsqueda principal
+  // =====================
   const ejecutarBusqueda = useCallback(() => {
     const term = q.trim();
     if (!term) {
@@ -52,7 +138,9 @@ export default function Dashboard({ onLogout }) {
     navigate(`/resultados?q=${encodeURIComponent(term)}`);
   }, [q, navigate]);
 
-  // --- atajos de teclado ---
+  // =====================
+  // Atajos de teclado
+  // =====================
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "Escape") handleLogout();
@@ -64,6 +152,14 @@ export default function Dashboard({ onLogout }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [handleLogout, ejecutarBusqueda]);
+
+  // =====================
+  // Cargar nombre al montar
+  // =====================
+  useEffect(() => {
+    const n = getUserName() || "Luis Marín";
+    setNombreUsuario(n);
+  }, []);
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
@@ -97,6 +193,14 @@ export default function Dashboard({ onLogout }) {
         {`@keyframes float { 0%{transform:translateY(0)} 50%{transform:translateY(-10px)} 100%{transform:translateY(0)} }`}
       </style>
 
+      {/* Bienvenida (lado izquierdo superior) */}
+      <div className="absolute left-6 top-6 text-white">
+        <span className="block text-sm opacity-80 leading-none">Bienvenido</span>
+        <span className="block text-2xl font-bold leading-tight drop-shadow">
+          {nombreUsuario}
+        </span>
+      </div>
+
       {/* Botón salir */}
       <button
         onClick={handleLogout}
@@ -125,6 +229,8 @@ export default function Dashboard({ onLogout }) {
               <button
                 onClick={ejecutarBusqueda}
                 className="m-1 h-10 w-10 rounded-full grid place-items-center bg-slate-300/80 hover:scale-105 transition"
+                aria-label="Buscar"
+                title="Buscar"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
