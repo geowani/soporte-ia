@@ -1,10 +1,34 @@
+// api/busquedas-registro/index.js
 const { getPool, sql } = require("../_db");
 
+function parseCookies(cookieHeader = "") {
+  const out = {};
+  cookieHeader.split(";").forEach(p => {
+    const i = p.indexOf("=");
+    if (i > -1) out[p.slice(0, i).trim()] = decodeURIComponent(p.slice(i + 1).trim());
+  });
+  return out;
+}
+
 function readUserId(req) {
-  const headerId = req?.headers?.["x-user-id"];
-  const bodyId   = req?.body?.usuarioId;
-  const userId   = Number(headerId ?? bodyId ?? NaN);
-  return Number.isFinite(userId) ? userId : null;
+  const h = req?.headers || {};
+  const cookies = parseCookies(h.cookie || "");
+
+  const candidates = [
+    h["x-user-id"],
+    h["x-agent-id"],                 // <- nuevo
+    req?.body?.usuarioId,
+    req?.body?.agenteId,            // <- nuevo
+    req?.body?.user?.id_usuario,    // <- por si mandas el user
+    req?.body?.user?.id,
+    cookies["agent_id"],            // <- cookie que ya pones en auth.js
+  ];
+
+  for (const v of candidates) {
+    const n = Number(v);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
 }
 
 module.exports = async function (context, req) {
@@ -28,12 +52,7 @@ module.exports = async function (context, req) {
       .execute("dbo.sp_busqueda_evento_registrar");
 
     const id = rs?.recordset?.[0]?.id_busqueda_evento ?? null;
-
-    context.res = {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-      body: { ok: true, id }
-    };
+    context.res = { status: 200, headers: { "Content-Type": "application/json" }, body: { ok: true, id } };
   } catch (err) {
     context.log.error("POST /api/busqueda-evento-registrar ERROR:", err);
     context.res = { status: 500, body: { error: "Error registrando búsqueda" } };
