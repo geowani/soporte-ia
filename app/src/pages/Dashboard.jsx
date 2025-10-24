@@ -88,6 +88,11 @@ export default function Dashboard({ onLogout }) {
     return "";
   }
 
+  // Devuelve el primer nombre de un nombre completo
+  function getFirstName(full) {
+    return String(full || "").trim().split(/\s+/)[0] || "Usuario";
+  }
+
   // =====================
   // Logout
   // =====================
@@ -161,6 +166,8 @@ export default function Dashboard({ onLogout }) {
     setNombreUsuario(n);
   }, []);
 
+  const primerNombre = getFirstName(nombreUsuario);
+
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
       {/* Fondo */}
@@ -195,9 +202,11 @@ export default function Dashboard({ onLogout }) {
 
       {/* Bienvenida (lado izquierdo superior) */}
       <div className="absolute left-6 top-6 text-white">
-        <span className="block text-sm opacity-80 leading-none">Bienvenido</span>
         <span className="block text-2xl font-bold leading-tight drop-shadow">
-          {nombreUsuario}
+          Hola {primerNombre},
+        </span>
+        <span className="block text-sm opacity-80 leading-none">
+          ¿En qué te puedo ayudar hoy?
         </span>
       </div>
 
