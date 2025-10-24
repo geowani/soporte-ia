@@ -91,10 +91,8 @@ export default function Resultados() {
   function stripAiSelfHeader(txt) {
     if (!txt) return "";
     const lines = String(txt).split(/\r?\n/);
-    // Si la primera línea es "Respuesta generada con inteligencia artificial:" (con o sin dos puntos)
     if (lines.length && /^\s*respuesta\s+generada\s+con\s+inteligencia\s+artificial:?\s*$/i.test(lines[0])) {
       lines.shift();
-      // Quita líneas vacías iniciales tras remover el encabezado
       while (lines.length && /^\s*$/.test(lines[0])) lines.shift();
     }
     return lines.join("\n");
@@ -226,12 +224,7 @@ export default function Resultados() {
       </div>
 
       {/* Contenido */}
-      <div
-        className={[
-          "mt-6 px-4 w-full flex flex-col items-center transition-[padding] duration-200",
-          showAsideIA ? "lg:pr-[200px]" : "",
-        ].join(" ")}
-      >
+      <div className="mt-6 px-4 w-full flex flex-col items-center">
         {/* Buscador */}
         <div className="w-full max-w-3xl flex items-center rounded-full bg-white/85 text-slate-900 overflow-hidden shadow-inner">
           <input
@@ -324,9 +317,43 @@ export default function Resultados() {
             </div>
           )}
         </div>
+
+        {/* PANEL IA — MÓVIL (debajo de resultados) */}
+        {showAsideIA && (
+          <section className="lg:hidden w-full max-w-4xl px-0 mt-4">
+            <div className="rounded-2xl bg-white/80 backdrop-blur-sm p-5 shadow border border-slate-200 text-slate-900">
+              <h3 className="text-lg font-bold mb-2">¿No encontraste lo que buscabas?</h3>
+              <p className="text-sm text-slate-600 mb-4">
+                Generar una respuesta con IA para:<br />
+                <b>“{q}”</b>
+              </p>
+
+              <button
+                onClick={generateAi}
+                disabled={aiLoading}
+                className="w-full rounded-xl py-3 font-semibold text-white disabled:opacity-60"
+                style={{ backgroundColor: "#1f2937" /* slate-900 */ }}
+              >
+                {aiLoading ? "Generando…" : "Generar con IA"}
+              </button>
+
+              {!!aiError && (
+                <div className="mt-3 text-red-700 bg-red-100 border border-red-300 rounded-md px-3 py-2">
+                  {aiError}
+                </div>
+              )}
+
+              <ul className="mt-4 text-xs text-slate-600 list-disc pl-5 space-y-1">
+                <li>Usa palabras clave del módulo o área.</li>
+                <li>Prueba con ID o número de caso si lo conoces.</li>
+                <li>Valida los pasos con procedimientos internos.</li>
+              </ul>
+            </div>
+          </section>
+        )}
       </div>
 
-      {/* PANEL LATERAL IA */}
+      {/* PANEL LATERAL IA — DESKTOP */}
       {showAsideIA && (
         <aside className="hidden lg:block fixed right-6 top-[180px] w-[320px] rounded-2xl p-4 border shadow-[0_12px_40px_rgba(0,0,0,.25)] bg-white/80 text-slate-900 border-white/30 ring-2 ring-sky-400">
           <div className="font-semibold text-base mb-1">¿No encontraste lo que buscabas?</div>
