@@ -134,19 +134,18 @@ export default function App() {
           }}
         />
         <div
-          className="absolute inset-0 -z-10 opacity-45"
-          style={{
-            backgroundImage: `
-              radial-gradient(2px 2px at 20% 30%, rgba(88,164,255,.6) 40%, transparent 41%),
-              radial-gradient(2px 2px at 40% 70%, rgba(88,164,255,.45) 40%, transparent 41%),
-              radial-gradient(2px 2px at 65% 50%, rgba(88,164,255,.5) 40%, transparent 41%),
-              radial-gradient(2px 2px at 80% 20%, rgba(88,164,255,.35) 40%, transparent 41%),
-              radial-gradient(2px 2px at 15% 85%, rgba(88,164,255,.35) 40%, transparent 41%)
-            `,
-            filter: "blur(.2px)",
-            animation: "float 12s linear infinite"
-          }}
-        />
+  className="absolute inset-0 -z-20"
+  style={{
+    backgroundImage: "url('/fondo.jpg')",
+    backgroundRepeat: "no-repeat",
+    backgroundAttachment: "fixed",
+    backgroundPosition: "center center",
+    backgroundSize: "cover",
+    imageRendering: "crisp-edges",       // mejora nitidez en scaling
+    transform: "translateZ(0)",          // evita blur en algunos navegadores
+    filter: "brightness(1.1) contrast(1.05)", // leve realce visual
+  }}
+/>
         <style>{`@keyframes float { 0%{transform:translateY(0)} 50%{transform:translateY(-10px)} 100%{transform:translateY(0)} }`}</style>
 
         <div className="min-h-screen grid place-items-center p-6">
