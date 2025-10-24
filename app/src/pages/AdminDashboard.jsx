@@ -135,7 +135,6 @@ export default function AdminDashboard({ onLogout }) {
           <div className="flex justify-between items-center mb-10">
             <h1 className="text-4xl md:text-5xl font-extrabold">Panel de Administrador</h1>
             <span className="hidden md:block text-white/80">
-              Bienvenido, <b>{nombreUsuario}</b>
             </span>
           </div>
 
