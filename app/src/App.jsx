@@ -1,5 +1,5 @@
 // app/src/App.jsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import "./index.css";
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
@@ -46,6 +46,20 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [logged, setLogged] = useState(() => localStorage.getItem("logged") === "1");
   const navigate = useNavigate();
+
+  // 🔹 Cada vez que no hay sesión, aseguramos limpiar storage e inputs
+  useEffect(() => {
+    if (!logged) {
+      try {
+        localStorage.clear();
+        sessionStorage.clear();
+      } catch {}
+      setEmail("");
+      setPassword("");
+      setMsg("");
+      setType("info");
+    }
+  }, [logged]);
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -139,7 +153,7 @@ export default function App() {
           <section className="w-full max-w-md rounded-2xl border border-white/20 p-7 md:p-8 shadow-[0_20px_60px_rgba(0,0,0,.45)] bg-white/10 backdrop-blur-md">
             <h1 className="text-center font-extrabold tracking-wide mb-6">INICIO DE SESIÓN</h1>
 
-            <form onSubmit={onSubmit} className="flex flex-col gap-4">
+            <form onSubmit={onSubmit} autoComplete="off" className="flex flex-col gap-4">
               <label className="flex flex-col gap-2 font-semibold text-slate-200">
                 <span>Correo:</span>
                 <input
@@ -148,6 +162,7 @@ export default function App() {
                   placeholder="Correo"
                   value={email}
                   onChange={(e)=>setEmail(e.target.value)}
+                  autoComplete="username"
                 />
               </label>
 
@@ -159,6 +174,7 @@ export default function App() {
                   placeholder="••••••"
                   value={password}
                   onChange={(e)=>setPassword(e.target.value)}
+                  autoComplete="current-password"
                 />
               </label>
 
@@ -188,18 +204,25 @@ export default function App() {
     );
   }
 
-  // logout: limpia todo
+  // logout: limpia todo y resetea UI del login
   const onLogout = () => {
-    localStorage.removeItem("logged");
-    localStorage.removeItem("userRole");
-    localStorage.removeItem("userEmail");
-    localStorage.removeItem("user");
-    localStorage.removeItem("agentId");
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch {}
     // limpia cookies
     document.cookie = "agent_id=; Path=/; Max-Age=0; SameSite=Lax; Secure";
     document.cookie = "user_email=; Path=/; Max-Age=0; SameSite=Lax; Secure";
     document.cookie = "role=; Path=/; Max-Age=0; SameSite=Lax; Secure";
+
+    // reset de estados de UI
     setLogged(false);
+    setEmail("");
+    setPassword("");
+    setMsg("");
+    setType("info");
+
+    // regresar a raíz (el login aparece al no estar logueado)
     navigate("/", { replace: true });
   };
 
@@ -277,6 +300,5 @@ export default function App() {
         element={<Navigate to={isAdminRole(role) ? "/admin" : "/dashboard"} replace />}
       />
     </Routes>
-    
   );
 }
