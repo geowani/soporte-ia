@@ -116,7 +116,7 @@ export default function AdminDashboard({ onLogout }) {
           Hola {primerNombre},
         </span>
         <span className="block text-sm opacity-80 leading-none">
-          ¿Listo para administrar hoy?
+          ¿En qué te puedo ayudar hoy?
         </span>
       </div>
 
