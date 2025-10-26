@@ -8,6 +8,8 @@ export default function Resultados() {
   const navigate = useNavigate();
 
   const urlQ = new URLSearchParams(location.search).get("q") || "";
+  theq: {
+  }
   const [q, setQ] = useState(urlQ);
 
   const [items, setItems] = useState([]);
@@ -208,10 +210,13 @@ export default function Resultados() {
     return "";
   }, [q, loading, error, items, aiResult]);
 
-  // 👇 clases dinámicas para el layout
-  // - si mostramos el aside IA (no hubo resultados): 2 columnas en desktop y ancho grande
-  // - si NO mostramos aside IA (sí hubo resultados): 1 columna y ancho más angosto tipo tarjeta centrada
-  const gridColsClass = showAsideIA ? "lg:grid-cols-[2fr_1fr]" : "lg:grid-cols-1";
+  // clases dinámicas para el layout:
+  // - si hay aside IA (sin resultados): 2 columnas con proporción 3 / 1.1 y gap reducido
+  // - si no hay aside IA (sí hay resultados): 1 columna centrada y tarjeta más angosta
+  const gridColsClass = showAsideIA
+    ? "lg:grid-cols-[3fr_1.1fr] lg:gap-4"
+    : "lg:grid-cols-1 lg:gap-0";
+
   const maxWidthClass = showAsideIA ? "max-w-6xl" : "max-w-4xl";
 
   return (
@@ -267,7 +272,7 @@ export default function Resultados() {
 
         {/* GRID RESULTADOS + (opcional) PANEL IA escritorio */}
         <div
-          className={`mt-5 w-full ${maxWidthClass} grid gap-6 ${gridColsClass} items-start`}
+          className={`mt-5 w-full ${maxWidthClass} grid ${gridColsClass} items-start`}
         >
           {/* CARD RESULTADOS */}
           <div className="rounded-2xl bg-slate-200/85 text-slate-900 p-5 md:p-6 border border-white/20 shadow-[0_20px_60px_rgba(0,0,0,.35)]">
