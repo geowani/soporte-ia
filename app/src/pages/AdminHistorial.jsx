@@ -253,7 +253,7 @@ export default function AdminHistorial() {
             {err && <div className="py-6 text-red-600">{err}</div>}
             {!hasSearched && !loading && !err && (
               <div className="py-6 text-gray-600">
-                Ingresa <b>caso, título o usuario</b> o <b>fecha desde</b> y <b>fecha hasta</b>, define <b>Resultados</b> y presiona <b>Buscar</b>.
+                Ingresa <b>numero de caso</b> o <b>fecha desde</b> y <b>fecha hasta</b>, define <b>Resultados</b> y presiona <b>Buscar</b>.
               </div>
             )}
 
