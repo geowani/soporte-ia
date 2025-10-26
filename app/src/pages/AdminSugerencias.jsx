@@ -11,7 +11,8 @@ export default function AdminSugerencias() {
 
   // Filtros
   const [term, setTerm] = useState("");
-  const [top, setTop] = useState(10); // default 10
+  const [top, setTop] = useState(5); // 🔹 default ahora 5
+  const [fecha, setFecha] = useState(""); // 🔹 nuevo filtro fecha (YYYY-MM-DD)
 
   async function load() {
     try {
@@ -19,9 +20,12 @@ export default function AdminSugerencias() {
       setErr("");
 
       const params = new URLSearchParams();
-      params.set("top", String(top || 10));  // fallback 10
-      params.set("sort", "asc");             // <- viejo -> reciente
+      params.set("top", String(top || 5)); // fallback 5
+      params.set("sort", "asc");           // <- viejo -> reciente
       if (term.trim()) params.set("term", term.trim());
+
+      // 🔹 si hay fecha seleccionada la mandamos al backend
+      if (fecha) params.set("fecha", fecha);
 
       const res = await fetch(`/api/sugerencias?${params.toString()}`);
       const txt = await res.text();
@@ -37,7 +41,11 @@ export default function AdminSugerencias() {
     }
   }
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+  // carga inicial (5 resultados)
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line
+  }, []);
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden">
@@ -94,6 +102,7 @@ export default function AdminSugerencias() {
 
           {/* filtros */}
           <div className="flex flex-wrap items-end gap-3 mb-6">
+            {/* Buscar por número de caso */}
             <div className="flex flex-col">
               <label className="text-sm text-white/80 mb-1">Buscar</label>
               <input
@@ -103,6 +112,19 @@ export default function AdminSugerencias() {
                 onChange={(e) => setTerm(e.target.value)}
               />
             </div>
+
+            {/* 🔹 Nuevo: fecha */}
+            <div className="flex flex-col">
+              <label className="text-sm text-white/80 mb-1">Fecha</label>
+              <input
+                type="date"
+                className="rounded-full bg-white text-slate-900 px-4 py-2 outline-none shadow-inner shadow-black/10"
+                value={fecha}
+                onChange={(e) => setFecha(e.target.value)}
+              />
+            </div>
+
+            {/* Número de resultados */}
             <div className="flex flex-col">
               <label className="text-sm text-white/80 mb-1">Número de resultados</label>
               <input
@@ -111,17 +133,26 @@ export default function AdminSugerencias() {
                 max={200}
                 className="rounded-full bg-white text-slate-900 px-4 py-2 outline-none w-28"
                 value={top}
-                onChange={(e) => setTop(Number(e.target.value || 10))}
+                onChange={(e) => setTop(Number(e.target.value || 5))}
               />
             </div>
+
+            {/* Botón Buscar */}
             <button
               onClick={load}
               className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold"
             >
               Buscar
             </button>
+
+            {/* Botón Limpiar */}
             <button
-              onClick={() => { setTerm(""); setTop(10); load(); }} // reset a 10
+              onClick={() => {
+                setTerm("");
+                setFecha("");
+                setTop(5);
+                load();
+              }}
               className="px-5 py-2 rounded-xl bg-slate-500/70 hover:bg-slate-600 text-white font-semibold"
             >
               Limpiar
@@ -142,9 +173,11 @@ export default function AdminSugerencias() {
               <ul className="divide-y divide-gray-300">
                 {items.map((it) => {
                   const displayAgent =
-                    (it.agenteNombre && it.agenteNombre.trim()) ? it.agenteNombre
-                    : (it.agenteEmail && it.agenteEmail.trim()) ? it.agenteEmail
-                    : `ID ${it.agenteId}`;
+                    (it.agenteNombre && it.agenteNombre.trim())
+                      ? it.agenteNombre
+                      : (it.agenteEmail && it.agenteEmail.trim())
+                      ? it.agenteEmail
+                      : `ID ${it.agenteId}`;
 
                   return (
                     <li
