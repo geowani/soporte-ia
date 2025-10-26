@@ -1,62 +1,54 @@
-// api/ai-answer/index.js  (CommonJS + Gemini v1 con autodetección de modelo + continuación)
-const sql = require('mssql');
+// api/ai-answer/index.js (versión protegida para uso en Genpact)
+const sql = require("mssql");
 
 /* ------------------ SQL: parsear cadena ADO.NET ------------------ */
 function parseConnStr(connStr = "") {
   const parts = {};
-  connStr.split(';').forEach(p => {
-    const [k, v] = p.split('=');
+  connStr.split(";").forEach((p) => {
+    const [k, v] = p.split("=");
     if (!k || !v) return;
     parts[k.trim().toLowerCase()] = v.trim();
   });
   return {
     server: (parts["server"] || "").replace("tcp:", "").split(",")[0],
-    port: parts["server"]?.includes(",") ? parseInt(parts["server"].split(",")[1]) : 1433,
+    port: parts["server"]?.includes(",")
+      ? parseInt(parts["server"].split(",")[1])
+      : 1433,
     database: parts["database"],
     user: parts["user id"],
     password: parts["password"],
     options: {
       encrypt: (parts["encrypt"] || "true").toLowerCase() === "true",
-      trustServerCertificate: (parts["trustservercertificate"] || "false").toLowerCase() === "true"
-    }
+      trustServerCertificate:
+        (parts["trustservercertificate"] || "false").toLowerCase() === "true",
+    },
   };
 }
 
 const sqlConfig = parseConnStr(process.env.SQL_CONN_STR || "");
 
-/* ------------------ IA: Gemini (3 alternativas concisas, con sentinela y continuación) ------------------ */
-
+/* ------------------ IA: Configuración ------------------ */
 const MODELS_PREFERRED = [
   "models/gemini-2.5-flash-latest",
-  "models/gemini-2.5-flash",
   "models/gemini-2.5-pro-latest",
-  "models/gemini-2.5-pro",
-  "models/gemini-1.5-flash-latest",
   "models/gemini-1.5-flash",
-  "models/gemini-1.5-pro-latest",
-  "models/gemini-1.5-pro"
+  "models/gemini-1.5-pro",
 ];
 
 const TEMP = 0.2;
-const MAX_OUTPUT_TOKENS_FIRST = 1200; // antes 600
-const MAX_OUTPUT_TOKENS_CONT  = 800;
-const MAX_CONTINUATIONS       = 2;    // número de “continúa…” si vino cortado
+const MAX_OUTPUT_TOKENS_FIRST = 1200;
+const MAX_OUTPUT_TOKENS_CONT = 800;
+const MAX_CONTINUATIONS = 2;
 
+/* ------------------ Prompt ajustado al contexto Genpact ------------------ */
 function buildPrompt(q) {
-  return `Eres un asistente de soporte técnico.
-No hubo resultados en la base de datos para: "${q}".
-Responde con pasos claros, breves y accionables, en formato de lista numerada o viñetas.
-No incluyas frases de cierre como "háznoslo saber", "contáctame", "puedo ayudarte más" ni invitaciones a interacción humana. 
+  return `Eres un asistente especializado en soporte técnico de Genpact.
+Tu única función es brindar orientación sobre incidencias, software, hardware, bases de datos, redes o flujos de atención al cliente dentro del entorno empresarial.
+No reveles información sobre ti mismo, tu origen, tus creadores ni el modelo de IA que utilizas.
+Si la pregunta no está relacionada con soporte técnico, responde de forma neutra:
+"Lo siento, solo puedo responder consultas relacionadas con soporte técnico o incidencias del sistema."
 
-DEVUELVE EXACTAMENTE 3 ALTERNATIVAS numeradas del 1 al 3.
-Para cada alternativa:
-- Escribe un TÍTULO corto en UNA LÍNEA (sin adornos).
-- Debajo, 3 a 5 PASOS prácticos en viñetas ("- ").
-- No uses textos de cierre, disculpas ni invitaciones a interacción humana.
-- No agregues nada fuera de esas tres alternativas.
-- Responde en español.
-
-FORMATO ESTRICTO:
+Cuando sí sea una consulta válida, responde con EXACTAMENTE 3 ALTERNATIVAS numeradas del 1 al 3:
 1) <título corto>
 - paso 1
 - paso 2
@@ -72,133 +64,153 @@ FORMATO ESTRICTO:
 - paso 2
 - paso 3
 
-Al terminar, escribe exactamente [[END]].`;
+Cierra siempre con [[END]].`;
 }
 
 function buildContinuationPrompt(soFar) {
-  return `Sigue EXACTAMENTE donde te quedaste para completar las 3 alternativas.
-No repitas texto ya dado. Mantén el mismo formato y termina con [[END]].
-Texto hasta ahora:
+  return `Continúa la respuesta anterior sin repetir texto, manteniendo formato y tono técnico.
+Finaliza con [[END]].
+Texto previo:
 ${soFar}`;
 }
 
+/* ------------------ Funciones auxiliares ------------------ */
 function isComplete(txt = "") {
   return /\n?\s*3\)\s/.test(txt) && /\[\[END\]\]\s*$/.test(txt);
 }
 function stripEnd(txt = "") {
   return txt.replace(/\s*\[\[END\]\]\s*$/, "").trim();
 }
+function extractText(data) {
+  try {
+    const parts = data?.candidates?.[0]?.content?.parts || [];
+    return parts.map((p) => p?.text || "").join("\n");
+  } catch {
+    return "";
+  }
+}
+
+/* ------------------ Verificación de tema ------------------ */
+function isSupportRelated(q) {
+  const techWords = [
+    "soporte",
+    "ticket",
+    "incidencia",
+    "fallo",
+    "error",
+    "reporte",
+    "hardware",
+    "software",
+    "base de datos",
+    "servidor",
+    "sql",
+    "fastapi",
+    "azure",
+    "login",
+    "react",
+    "red",
+    "vpn",
+    "instalación",
+    "configuración",
+    "driver",
+    "equipo",
+    "sistema",
+  ];
+  const forbidden = [
+    "quién eres",
+    "qué eres",
+    "quién te creó",
+    "qué es gemini",
+    "modelo",
+    "openai",
+    "google",
+    "ia eres",
+    "eres real",
+  ];
+  const lower = q.toLowerCase();
+  if (forbidden.some((f) => lower.includes(f))) return false;
+  return techWords.some((w) => lower.includes(w));
+}
+
+/* ------------------ Comunicación con Gemini API ------------------ */
+async function callGemini({ apiKey, modelName, prompt, maxTokens }) {
+  const url = `https://generativelanguage.googleapis.com/v1/${modelName}:generateContent?key=${encodeURIComponent(
+    apiKey
+  )}`;
+  const body = {
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: { temperature: TEMP, maxOutputTokens: maxTokens },
+  };
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await resp.json();
+  return (extractText(data) || "").trim();
+}
 
 async function listModels(key) {
   try {
-    const list = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${encodeURIComponent(key)}`);
-    if (!list.ok) return [];
-    const data = await list.json();
-    return Array.isArray(data.models) ? data.models.map(m => m.name) : [];
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1/models?key=${encodeURIComponent(
+        key
+      )}`
+    );
+    const data = await res.json();
+    return (data.models || []).map((m) => m.name);
   } catch {
     return [];
   }
 }
 
 function orderCandidates(available) {
-  const fromList = [
-    ...available.filter(n => /gemini\-2\.5.*flash/i.test(n)),
-    ...available.filter(n => /gemini\-2\.5.*pro/i.test(n)),
-    ...available.filter(n => /gemini\-1\.5.*flash/i.test(n)),
-    ...available.filter(n => /gemini\-1\.5.*pro/i.test(n)),
-  ];
   const seen = new Set();
-  return [...fromList, ...MODELS_PREFERRED].filter(n => {
-    if (!n) return false;
-    if (seen.has(n)) return false;
+  return [...MODELS_PREFERRED, ...available].filter((n) => {
+    if (!n || seen.has(n)) return false;
     seen.add(n);
     return true;
   });
 }
 
-function extractText(data) {
-  try {
-    const parts = data?.candidates?.[0]?.content?.parts || [];
-    return parts.map(p => p?.text || "").join("\n");
-  } catch {
-    return "";
-  }
-}
+/* ------------------ Lógica de llamada ------------------ */
+async function askGeminiWithContinuation(q) {
+  const key = (process.env.GEMINI_API_KEY || "").trim();
+  if (!key) return "[Error] Falta GEMINI_API_KEY";
 
-async function callGemini({ apiKey, modelName, prompt, maxTokens }) {
-  const url = `https://generativelanguage.googleapis.com/v1/${modelName}:generateContent?key=${encodeURIComponent(apiKey)}`;
-  const body = {
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: { temperature: TEMP, maxOutputTokens: maxTokens }
-  };
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  });
-  if (!resp.ok) {
-    const msg = await resp.text().catch(() => "");
-    throw new Error(`Gemini HTTP ${resp.status}: ${msg.slice(0, 800)}`);
-  }
-  const data = await resp.json();
-  return (extractText(data) || "").trim();
-}
-
-/** Un solo disparo (elige el primer modelo que funcione) */
-async function askGeminiOnce(q, key, available) {
+  const available = await listModels(key);
   const prompt = buildPrompt(q);
   const candidates = orderCandidates(available);
-  let lastErr = null;
 
+  let out = "";
   for (const modelName of candidates) {
     try {
-      const txt = await callGemini({
+      out = await callGemini({
         apiKey: key,
         modelName,
         prompt,
-        maxTokens: MAX_OUTPUT_TOKENS_FIRST
+        maxTokens: MAX_OUTPUT_TOKENS_FIRST,
       });
-      if (txt) return txt;
-      lastErr = "[Gemini] respuesta vacía";
-    } catch (e) {
-      lastErr = String(e?.message || e);
-      // intenta siguiente modelo
-    }
+      if (out) break;
+    } catch {}
   }
-  return lastErr || "[Gemini] sin respuesta";
-}
 
-/** Wrapper con continuación si el primer tiro no llegó a [[END]] o faltó la 3) */
-async function askGeminiWithContinuation(q) {
-  const key = (process.env.GEMINI_API_KEY || "").trim();
-  if (!key) return "[Gemini] Falta GEMINI_API_KEY";
-
-  const available = await listModels(key);
-  let out = await askGeminiOnce(q, key, available);
-  if (isComplete(out)) return stripEnd(out);
-
-  // Si el primer intento vino corto (sin [[END]] o sin “3)”), pedimos continuar
-  for (let round = 0; round < MAX_CONTINUATIONS && !isComplete(out); round++) {
-    const contPrompt = buildContinuationPrompt(out);
-    const candidates = orderCandidates(available);
-    let appended = "";
-
+  for (let i = 0; i < MAX_CONTINUATIONS && !isComplete(out); i++) {
+    const cont = buildContinuationPrompt(out);
     for (const modelName of candidates) {
       try {
-        appended = await callGemini({
+        const more = await callGemini({
           apiKey: key,
           modelName,
-          prompt: contPrompt,
-          maxTokens: MAX_OUTPUT_TOKENS_CONT
+          prompt: cont,
+          maxTokens: MAX_OUTPUT_TOKENS_CONT,
         });
-        if (appended) break;
-      } catch {
-        // intenta el siguiente
-      }
+        if (more) {
+          out += "\n" + more;
+          break;
+        }
+      } catch {}
     }
-
-    if (appended) out = `${out}\n${appended}`.trim();
-    else break; // no se pudo agregar nada útil
   }
 
   return stripEnd(out);
@@ -214,7 +226,21 @@ module.exports = async function (context, req) {
       return;
     }
 
-    // IA directa (forzar Gemini para pruebas)
+    // 🔹 Filtro temático: solo responder sobre soporte técnico
+    if (!isSupportRelated(q)) {
+      context.res = {
+        status: 200,
+        body: {
+          mode: "filtered",
+          query: q,
+          answer:
+            "Lo siento, solo puedo responder consultas relacionadas con soporte técnico o incidencias del sistema.",
+        },
+      };
+      return;
+    }
+
+    // 🔹 IA directa (modo pruebas)
     if (forceAi === true) {
       const ai = await askGeminiWithContinuation(q);
       context.res = {
@@ -222,41 +248,37 @@ module.exports = async function (context, req) {
         body: {
           mode: "ai",
           query: q,
-          casoSugeridoId: null,
-          answer: `Respuesta generada con inteligencia artificial:\n\n${ai}`,
-          debug: {
-            len: ai.length,
-            ended: /\[\[END\]\]\s*$/.test(ai),
-            ms: Date.now() - t0
-          }
-        }
+          answer: `Respuesta generada automáticamente:\n\n${ai}`,
+          debug: { ms: Date.now() - t0 },
+        },
       };
       return;
     }
 
-    /* 1) Buscar en BD */
+    // 1) Buscar en BD
     let resultados = [];
-    let sqlError = null;
-
     try {
       const pool = await sql.connect(sqlConfig);
-      const r = await pool.request()
+      const r = await pool
+        .request()
         .input("q", sql.NVarChar, q)
         .input("page", sql.Int, 1)
         .input("pageSize", sql.Int, 3)
         .execute("dbo.sp_caso_buscar_front");
       resultados = r.recordset || [];
     } catch (err) {
-      sqlError = String(err?.message || err);
-      context.log("SQL ERROR:", sqlError);
-      resultados = [];
+      context.log("SQL ERROR:", err.message);
     }
 
-    /* 2) Si hay resultados -> responder con BD */
+    // 2) Si hay resultados -> devolverlos
     if (resultados.length > 0) {
       const top = resultados[0];
-      const bullets = resultados.map((c, i) =>
-        `- #${i + 1} ${c.codigo}: ${c.titulo} (${c.sistema || ""}/${c.sistema_det || ""})`).join("\n");
+      const bullets = resultados
+        .map(
+          (c, i) =>
+            `- #${i + 1} ${c.codigo}: ${c.titulo} (${c.sistema || ""}/${c.sistema_det || ""})`
+        )
+        .join("\n");
 
       context.res = {
         status: 200,
@@ -264,19 +286,13 @@ module.exports = async function (context, req) {
           mode: "db",
           query: q,
           casoSugeridoId: top.id,
-          answer:
-`Encontré casos relacionados en la base de datos:
-
-${bullets}
-
-Sugerencia principal: **${top.codigo} – ${top.titulo}**
-Resumen: ${top.descripcion}`
-        }
+          answer: `Encontré casos relacionados en la base de datos:\n\n${bullets}\n\nSugerencia principal: **${top.codigo} – ${top.titulo}**\nResumen: ${top.descripcion}`,
+        },
       };
       return;
     }
 
-    /* 3) Si no hay BD -> Gemini (con continuación) */
+    // 3) Si no hay resultados -> IA con continuidad
     const ai = await askGeminiWithContinuation(q);
     context.res = {
       status: 200,
@@ -284,17 +300,15 @@ Resumen: ${top.descripcion}`
         mode: "ai",
         query: q,
         casoSugeridoId: null,
-        answer: `Respuesta generada con inteligencia artificial:\n\n${ai}`,
-        sqlError,
-        debug: {
-          len: ai.length,
-          ended: /\[\[END\]\]\s*$/.test(ai),
-          ms: Date.now() - t0
-        }
-      }
+        answer: `Respuesta generada automáticamente:\n\n${ai}`,
+        debug: { ms: Date.now() - t0 },
+      },
     };
   } catch (e) {
     context.log(e);
-    context.res = { status: 500, body: { error: "Error procesando la solicitud" } };
+    context.res = {
+      status: 500,
+      body: { error: "Error procesando la solicitud" },
+    };
   }
 };
