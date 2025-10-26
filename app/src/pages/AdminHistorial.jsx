@@ -13,7 +13,7 @@ export default function AdminHistorial() {
   const [q, setQ] = useState("");
   const [from, setFrom] = useState(""); // yyyy-mm-dd (input type="date")
   const [to, setTo] = useState("");     // yyyy-mm-dd (input type="date")
-  const [limit, setLimit] = useState(50);
+  const [limit, setLimit] = useState(10);
 
   // control de búsqueda
   const [hasSearched, setHasSearched] = useState(false);
