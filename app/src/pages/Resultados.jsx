@@ -8,8 +8,6 @@ export default function Resultados() {
   const navigate = useNavigate();
 
   const urlQ = new URLSearchParams(location.search).get("q") || "";
-  theq: {
-  }
   const [q, setQ] = useState(urlQ);
 
   const [items, setItems] = useState([]);
@@ -73,7 +71,9 @@ export default function Resultados() {
       const isNumbered = /^\s*\d+[\.\)]\s+/.test(L);
       const isBullet = /^\s*[-*•]\s+/.test(L);
       if (isBullet) L = L.replace(/^\s*[-*•]\s+/, "- ");
-      if ((isNumbered || isBullet) && out.length && out[out.length - 1] !== "") out.push("");
+      if ((isNumbered || isBullet) && out.length && out[out.length - 1] !== "") {
+        out.push("");
+      }
       out.push(L);
     }
     return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
@@ -83,9 +83,12 @@ export default function Resultados() {
   function stripDbSummaryBlocks(txt) {
     if (!txt) return "";
     let t = String(txt);
-    t = t.replace(/Encontr[ée]\s+casos\s+relacionados[\s\S]*?(?:Resumen:[^\n]*\n?)?/i, "");
+    t = t.replace(
+      /Encontr[ée]\s+casos\s+relacionados[\s\S]*?(?:Resumen:[^\n]*\n?)?/i,
+      ""
+    );
     t = t.replace(/Sugerencia\s+principal:[^\n]*\n?/i, "");
-    t = t.replace(/^\s*-\s*#\d+.*$/gmi, "");
+    t = t.replace(/^\s*-\s*#\d+.*$/gim, "");
     return t.replace(/\n{3,}/g, "\n\n").trim();
   }
 
@@ -95,7 +98,9 @@ export default function Resultados() {
     const lines = String(txt).split(/\r?\n/);
     if (
       lines.length &&
-      /^\s*respuesta\s+generada\s+con\s+inteligencia\s+artificial:?\s*$/i.test(lines[0])
+      /^\s*respuesta\s+generada\s+con\s+inteligencia\s+artificial:?\s*$/i.test(
+        lines[0]
+      )
     ) {
       lines.shift();
       while (lines.length && /^\s*$/.test(lines[0])) lines.shift();
@@ -199,22 +204,30 @@ export default function Resultados() {
   // - no hay resultados de BD
   // - aún no se generó respuesta IA
   const showAsideIA = useMemo(() => {
-    return q.trim() && !loading && !error && (items?.length || 0) === 0 && !aiResult;
+    return (
+      q.trim() &&
+      !loading &&
+      !error &&
+      (items?.length || 0) === 0 &&
+      !aiResult
+    );
   }, [q, loading, error, items, aiResult]);
 
   // mensaje debajo de "Resultados:"
   const emptyMessage = useMemo(() => {
     if (!q.trim()) return "Escribe un término para buscar.";
     if (loading || error) return "";
-    if ((items?.length || 0) === 0 && !aiResult) return `Sin coincidencias para “${q}”.`;
+    if ((items?.length || 0) === 0 && !aiResult)
+      return `Sin coincidencias para “${q}”.`;
     return "";
   }, [q, loading, error, items, aiResult]);
 
-  // clases dinámicas para el layout:
-  // - si hay aside IA (sin resultados): 2 columnas con proporción 3 / 1.1 y gap reducido
-  // - si no hay aside IA (sí hay resultados): 1 columna centrada y tarjeta más angosta
+  // Layout dinámico:
+  // - cuando hay aside IA: 2 columnas con proporción 3 / 1, gap pequeño
+  //   y aside con ancho fijo para no robarle demasiado a resultados
+  // - cuando NO hay aside IA: 1 columna, más angosto y centrado
   const gridColsClass = showAsideIA
-    ? "lg:grid-cols-[3fr_1.1fr] lg:gap-4"
+    ? "lg:grid-cols-[1fr_minmax(340px,380px)] lg:gap-4"
     : "lg:grid-cols-1 lg:gap-0";
 
   const maxWidthClass = showAsideIA ? "max-w-6xl" : "max-w-4xl";
@@ -275,7 +288,7 @@ export default function Resultados() {
           className={`mt-5 w-full ${maxWidthClass} grid ${gridColsClass} items-start`}
         >
           {/* CARD RESULTADOS */}
-          <div className="rounded-2xl bg-slate-200/85 text-slate-900 p-5 md:p-6 border border-white/20 shadow-[0_20px_60px_rgba(0,0,0,.35)]">
+          <div className="min-w-0 w-full rounded-2xl bg-slate-200/85 text-slate-900 p-5 md:p-6 border border-white/20 shadow-[0_20px_60px_rgba(0,0,0,.35)]">
             <div className="flex items-center justify-between mb-3">
               <div className="font-bold text-lg">Resultados:</div>
               {total > 0 && (
@@ -362,7 +375,7 @@ export default function Resultados() {
 
           {/* PANEL IA — DESKTOP (columna derecha en lg, solo si aplica) */}
           {showAsideIA && (
-            <aside className="hidden lg:block rounded-2xl bg-white/80 backdrop-blur-sm p-5 shadow border border-slate-200 text-slate-900">
+            <aside className="hidden lg:block lg:w-[360px] lg:max-w-[380px] rounded-2xl bg-white/80 backdrop-blur-sm p-5 shadow border border-slate-200 text-slate-900">
               <h3 className="text-lg font-bold mb-2">
                 ¿No encontraste lo que buscabas?
               </h3>
