@@ -39,39 +39,33 @@ module.exports = async function (context, req) {
       const estado = String(req.query.estado || '').trim().toLowerCase();
       const agenteIdQ = Number(req.query.agenteId || 0);
 
-      // 🔹 nuevo: fecha exacta enviada desde el front (YYYY-MM-DD)
+      // fecha exacta enviada desde el front (YYYY-MM-DD)
       const fechaQ = String(req.query.fecha || "").trim();
 
       // dirección de orden
       const sort = String(req.query.sort || 'asc').toLowerCase(); // 'asc' | 'desc'
       const dir = (sort === 'desc') ? 'DESC' : 'ASC';             // default: ASC (viejo -> reciente)
 
+      // armamos el request para SQL
       const q = pool.request().input('top', sql.Int, top);
-      let where = '1=1';
 
+      // vamos a construir las condiciones de forma más inteligente:
+      // 1) orGroup: condiciones amplias (term y/o fecha) que deben combinarse con OR entre sí
+      // 2) andConds: condiciones estrictas que siempre se aplican con AND (estado, agente)
+      const orGroup = [];
+      const andConds = [];
+
+      // --- filtro por term ---
       if (term) {
         q.input('term', sql.NVarChar(100), `%${term}%`);
-        where += ' AND (s.numero_caso LIKE @term OR s.notas LIKE @term)';
+        orGroup.push('(s.numero_caso LIKE @term OR s.notas LIKE @term)');
       }
 
-      if (estado) {
-        q.input('estado', sql.NVarChar(50), estado);
-        where += ' AND s.estado = @estado';
-      }
-
-      if (Number.isInteger(agenteIdQ) && agenteIdQ > 0) {
-        q.input('agenteId', sql.Int, agenteIdQ);
-        where += ' AND s.agente_id = @agenteId';
-      }
-
-      // 🔹 filtro por fecha: si viene una fecha válida, filtramos todo lo creado ese día
+      // --- filtro por fecha ---
       if (fechaQ) {
-        // fechaQ viene en formato "YYYY-MM-DD" (porque es el value del <input type="date" />)
         const fechaObj = new Date(fechaQ);
 
-        // validamos que sea una fecha real
         if (!isNaN(fechaObj.getTime())) {
-          // construimos rango UTC del día completo
           const inicio = new Date(fechaObj);
           inicio.setUTCHours(0, 0, 0, 0);
 
@@ -81,10 +75,41 @@ module.exports = async function (context, req) {
           q.input('inicio', sql.DateTime2, inicio);
           q.input('fin', sql.DateTime2, fin);
 
-          where += ' AND s.creado_en BETWEEN @inicio AND @fin';
+          orGroup.push('(s.creado_en BETWEEN @inicio AND @fin)');
         }
       }
 
+      // --- filtro por estado ---
+      if (estado) {
+        q.input('estado', sql.NVarChar(50), estado);
+        andConds.push('s.estado = @estado');
+      }
+
+      // --- filtro por agente ---
+      if (Number.isInteger(agenteIdQ) && agenteIdQ > 0) {
+        q.input('agenteId', sql.Int, agenteIdQ);
+        andConds.push('s.agente_id = @agenteId');
+      }
+
+      // ===== construir WHERE final =====
+      // siempre hay un 1=1 para que concatenar sea fácil
+      let where = '1=1';
+
+      // si hay filtros amplios (term/fecha), los metemos con OR
+      if (orGroup.length === 1) {
+        // solo term o solo fecha
+        where += ` AND ${orGroup[0]}`;
+      } else if (orGroup.length > 1) {
+        // ambos term y fecha -> usar OR entre ellos
+        where += ` AND (${orGroup.join(' OR ')})`;
+      }
+
+      // luego agregamos los AND estrictos
+      if (andConds.length > 0) {
+        where += ' AND ' + andConds.join(' AND ');
+      }
+
+      // query final
       const rs = await q.query(`
         SELECT TOP (@top)
           s.id_sugerencia               AS id,
