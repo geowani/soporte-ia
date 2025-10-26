@@ -91,7 +91,10 @@ export default function Resultados() {
   function stripAiSelfHeader(txt) {
     if (!txt) return "";
     const lines = String(txt).split(/\r?\n/);
-    if (lines.length && /^\s*respuesta\s+generada\s+con\s+inteligencia\s+artificial:?\s*$/i.test(lines[0])) {
+    if (
+      lines.length &&
+      /^\s*respuesta\s+generada\s+con\s+inteligencia\s+artificial:?\s*$/i.test(lines[0])
+    ) {
       lines.shift();
       while (lines.length && /^\s*$/.test(lines[0])) lines.shift();
     }
@@ -187,6 +190,13 @@ export default function Resultados() {
     navigate(`/resultados?q=${encodeURIComponent(term)}`, { replace: true });
   }, [q, navigate]);
 
+  // showAsideIA:
+  // true cuando:
+  // - hay texto en el input
+  // - no estamos cargando
+  // - no hubo error
+  // - no hay resultados de BD
+  // - no hay respuesta IA ya generada
   const showAsideIA = useMemo(() => {
     return q.trim() && !loading && !error && (items?.length || 0) === 0 && !aiResult;
   }, [q, loading, error, items, aiResult]);
@@ -239,90 +249,110 @@ export default function Resultados() {
             onClick={doSearch}
             className="m-1 h-10 w-10 rounded-full grid place-items-center bg-slate-300/80 hover:scale-105 transition"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5 fill-slate-700">
-              <path d="M15.5 14h-.79l-.28-.27a6.471 6.471 0 0 0 1.57-4.23C16 6.01 12.99 3 9.5 3S3 6.01 3 9.5 6.01 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99 1.49-1.49-4.99-5zM9.5 14C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              className="h-5 w-5 fill-slate-700"
+            >
+              <path d="M15.5 14h-.79l-.28-.27a6.471 6.471 0 0 0 1.57-4.23C16 6.01 12.99 3 9.5 3S3 6.01 3 9.5 6.01 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99 1.49-1.49-4.99-5zM9.5 14C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
             </svg>
           </button>
         </div>
 
-        {/* CARD RESULTADOS */}
-        <div className="mt-5 w-full max-w-4xl rounded-2xl bg-slate-200/85 text-slate-900 p-5 md:p-6 border border-white/20 shadow-[0_20px_60px_rgba(0,0,0,.35)]">
-          <div className="flex items-center justify-between mb-3">
-            <div className="font-bold text-lg">Resultados:</div>
-            {total > 0 && (
-              <div className="text-sm text-slate-700">
-                {total} coincidencia{total === 1 ? "" : "s"}
+        {/* ======= GRID RESULTADOS + PANEL IA (desktop) ======= */}
+        <div className="mt-5 w-full max-w-6xl grid gap-6 lg:grid-cols-[2fr_1fr] items-start">
+          {/* CARD RESULTADOS */}
+          <div className="rounded-2xl bg-slate-200/85 text-slate-900 p-5 md:p-6 border border-white/20 shadow-[0_20px_60px_rgba(0,0,0,.35)]">
+            <div className="flex items-center justify-between mb-3">
+              <div className="font-bold text-lg">Resultados:</div>
+              {total > 0 && (
+                <div className="text-sm text-slate-700">
+                  {total} coincidencia{total === 1 ? "" : "s"}
+                </div>
+              )}
+            </div>
+
+            {!!error && (
+              <div className="text-red-700 bg-red-100 border border-red-300 rounded-md px-3 py-2 mb-3">
+                {error}
+              </div>
+            )}
+
+            {/* Si hay resultados de BD */}
+            {!loading && !error && items?.length > 0 && (
+              <div className="max-h-[60vh] overflow-y-auto pr-2">
+                {items.map((c, i) => (
+                  <div
+                    key={i}
+                    className="py-3 border-b border-slate-400/40"
+                  >
+                    <div className="flex items-start justify-between">
+                      <button
+                        onClick={() =>
+                          navigate(`/caso/${c.id_caso ?? c.id}`, {
+                            state: { fromQ: q, row: c },
+                          })
+                        }
+                        className="text-blue-600 font-bold hover:underline text-left"
+                      >
+                        Caso: {c.numero_caso ?? c.id_caso}
+                      </button>
+                      <span className="text-blue-600 font-semibold">
+                        {c.departamento || "—"}
+                      </span>
+                    </div>
+                    <div className="text-slate-800 mt-1">
+                      {c.asunto && (
+                        <span className="font-semibold">{c.asunto}. </span>
+                      )}
+                      <span className="text-blue-600">
+                        Descripción: {c.descripcion}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Si NO hay resultados */}
+            {!loading && !error && (items?.length || 0) === 0 && q.trim() && (
+              <div className="mt-2">
+                {aiLoading && (
+                  <div className="text-slate-700 animate-pulse">
+                    Generando respuesta con IA…
+                  </div>
+                )}
+
+                {!aiLoading && !aiResult && (
+                  <div className="text-slate-700">{emptyMessage}</div>
+                )}
+
+                {aiResult && (
+                  <div className="mt-3 bg-white/80 border border-slate-300 rounded-md p-4 whitespace-pre-wrap leading-relaxed text-slate-800">
+                    <div className="font-semibold mb-2 text-slate-900">
+                      Respuesta generada con inteligencia artificial:
+                    </div>
+                    {removeEmojis(
+                      stripAiSelfHeader(
+                        cleanMarkdown(stripDbSummaryBlocks(aiResult.answer))
+                      )
+                    ) || (
+                      <span className="text-slate-600 italic">
+                        No se generó texto. Intenta de nuevo.
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          {!!error && (
-            <div className="text-red-700 bg-red-100 border border-red-300 rounded-md px-3 py-2 mb-3">
-              {error}
-            </div>
-          )}
-
-          {/* Si hay resultados de BD */}
-          {!loading && !error && items?.length > 0 && (
-            <div className="max-h-[60vh] overflow-y-auto pr-2">
-              {items.map((c, i) => (
-                <div key={i} className="py-3 border-b border-slate-400/40">
-                  <div className="flex items-start justify-between">
-                    <button
-                      onClick={() => navigate(`/caso/${c.id_caso ?? c.id}`, { state: { fromQ: q, row: c } })}
-                      className="text-blue-600 font-bold hover:underline text-left"
-                    >
-                      Caso: {c.numero_caso ?? c.id_caso}
-                    </button>
-                    <span className="text-blue-600 font-semibold">{c.departamento || "—"}</span>
-                  </div>
-                  <div className="text-slate-800 mt-1">
-                    {c.asunto && <span className="font-semibold">{c.asunto}. </span>}
-                    <span className="text-blue-600">Descripción: {c.descripcion}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Si NO hay resultados */}
-          {!loading && !error && (items?.length || 0) === 0 && q.trim() && (
-            <div className="mt-2">
-              {aiLoading && (
-                <div className="text-slate-700 animate-pulse">Generando respuesta con IA…</div>
-              )}
-
-              {!aiLoading && !aiResult && (
-                <div className="text-slate-700">{emptyMessage}</div>
-              )}
-
-              {aiResult && (
-                <div className="mt-3 bg-white/80 border border-slate-300 rounded-md p-4 whitespace-pre-wrap leading-relaxed text-slate-800">
-                  <div className="font-semibold mb-2 text-slate-900">
-                    Respuesta generada con inteligencia artificial:
-                  </div>
-                  {removeEmojis(
-                    stripAiSelfHeader(
-                      cleanMarkdown(
-                        stripDbSummaryBlocks(aiResult.answer)
-                      )
-                    )
-                  ) || (
-                    <span className="text-slate-600 italic">
-                      No se generó texto. Intenta de nuevo.
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* PANEL IA — MÓVIL (debajo de resultados) */}
-        {showAsideIA && (
-          <section className="lg:hidden w-full max-w-4xl px-0 mt-4">
-            <div className="rounded-2xl bg-white/80 backdrop-blur-sm p-5 shadow border border-slate-200 text-slate-900">
-              <h3 className="text-lg font-bold mb-2">¿No encontraste lo que buscabas?</h3>
+          {/* PANEL IA — DESKTOP (columna derecha en lg) */}
+          {showAsideIA && (
+            <aside className="hidden lg:block rounded-2xl bg-white/80 backdrop-blur-sm p-5 shadow border border-slate-200 text-slate-900">
+              <h3 className="text-lg font-bold mb-2">
+                ¿No encontraste lo que buscabas?
+              </h3>
               <p className="text-sm text-slate-600 mb-4">
                 Generar una respuesta con IA para:<br />
                 <b>“{q}”</b>
@@ -331,8 +361,7 @@ export default function Resultados() {
               <button
                 onClick={generateAi}
                 disabled={aiLoading}
-                className="w-full rounded-xl py-3 font-semibold text-white disabled:opacity-60"
-                style={{ backgroundColor: "#1f2937" /* slate-900 */ }}
+                className="w-full rounded-xl py-3 font-semibold text-white disabled:opacity-60 bg-slate-800 hover:bg-slate-900"
               >
                 {aiLoading ? "Generando…" : "Generar con IA"}
               </button>
@@ -343,7 +372,42 @@ export default function Resultados() {
                 </div>
               )}
 
-              <ul className="mt-4 text-xs text-slate-600 list-disc pl-5 space-y-1">
+              <ul className="mt-4 text-xs text-slate-600 list-disc pl-5 space-y-1 leading-relaxed">
+                <li>Usa palabras clave del módulo o área.</li>
+                <li>Prueba con ID o número de caso si lo conoces.</li>
+                <li>Valida los pasos con procedimientos internos.</li>
+              </ul>
+            </aside>
+          )}
+        </div>
+
+        {/* PANEL IA — MÓVIL (debajo de resultados en <lg) */}
+        {showAsideIA && (
+          <section className="lg:hidden w-full max-w-6xl px-0 mt-4">
+            <div className="rounded-2xl bg-white/80 backdrop-blur-sm p-5 shadow border border-slate-200 text-slate-900">
+              <h3 className="text-lg font-bold mb-2">
+                ¿No encontraste lo que buscabas?
+              </h3>
+              <p className="text-sm text-slate-600 mb-4">
+                Generar una respuesta con IA para:<br />
+                <b>“{q}”</b>
+              </p>
+
+              <button
+                onClick={generateAi}
+                disabled={aiLoading}
+                className="w-full rounded-xl py-3 font-semibold text-white disabled:opacity-60 bg-slate-800 hover:bg-slate-900"
+              >
+                {aiLoading ? "Generando…" : "Generar con IA"}
+              </button>
+
+              {!!aiError && (
+                <div className="mt-3 text-red-700 bg-red-100 border border-red-300 rounded-md px-3 py-2">
+                  {aiError}
+                </div>
+              )}
+
+              <ul className="mt-4 text-xs text-slate-600 list-disc pl-5 space-y-1 leading-relaxed">
                 <li>Usa palabras clave del módulo o área.</li>
                 <li>Prueba con ID o número de caso si lo conoces.</li>
                 <li>Valida los pasos con procedimientos internos.</li>
@@ -352,33 +416,6 @@ export default function Resultados() {
           </section>
         )}
       </div>
-
-      {/* PANEL LATERAL IA — DESKTOP */}
-      {showAsideIA && (
-        <aside className="hidden lg:block fixed right-6 top-[180px] w-[320px] rounded-2xl p-4 border shadow-[0_12px_40px_rgba(0,0,0,.25)] bg-white/80 text-slate-900 border-white/30 ring-2 ring-sky-400">
-          <div className="font-semibold text-base mb-1">¿No encontraste lo que buscabas?</div>
-          <p className="text-sm mb-3">
-            Puedes generar una respuesta con IA para: <b>“{q}”</b>
-          </p>
-          <button
-            className="w-full px-3 py-2 rounded bg-slate-800 text-white hover:bg-slate-900 disabled:opacity-60"
-            onClick={generateAi}
-            disabled={aiLoading}
-          >
-            {aiLoading ? "Generando…" : "Generar con IA"}
-          </button>
-          {!!aiError && (
-            <div className="mt-3 text-red-700 bg-red-100 border border-red-300 rounded-md px-3 py-2">
-              {aiError}
-            </div>
-          )}
-          <ul className="mt-3 text-xs text-slate-700 space-y-1">
-            <li>• Usa palabras clave del módulo, área o departamento</li>
-            <li>• Prueba con el ID o número de caso si lo conoces.</li>
-            <li>• La IA sugiere pasos; Puedes validar con procedimientos internos.</li>
-          </ul>
-        </aside>
-      )}
     </main>
   );
 }
