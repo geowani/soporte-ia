@@ -358,7 +358,7 @@ export default function Resultados() {
         <aside className="hidden lg:block fixed right-6 top-[180px] w-[320px] rounded-2xl p-4 border shadow-[0_12px_40px_rgba(0,0,0,.25)] bg-white/80 text-slate-900 border-white/30 ring-2 ring-sky-400">
           <div className="font-semibold text-base mb-1">¿No encontraste lo que buscabas?</div>
           <p className="text-sm mb-3">
-            Generar una respuesta con IA para: <b>“{q}”</b>
+            Puedes generar una respuesta con IA para: <b>“{q}”</b>
           </p>
           <button
             className="w-full px-3 py-2 rounded bg-slate-800 text-white hover:bg-slate-900 disabled:opacity-60"
@@ -373,9 +373,9 @@ export default function Resultados() {
             </div>
           )}
           <ul className="mt-3 text-xs text-slate-700 space-y-1">
-            <li>• Usa palabras clave del módulo o área (p. ej., “LOM”, “CONTRATO”).</li>
+            <li>• Usa palabras clave del módulo, área o departamento</li>
             <li>• Prueba con el ID o número de caso si lo conoces.</li>
-            <li>• La IA sugiere pasos; valida con procedimientos internos.</li>
+            <li>• La IA sugiere pasos; Puedes validar con procedimientos internos.</li>
           </ul>
         </aside>
       )}
