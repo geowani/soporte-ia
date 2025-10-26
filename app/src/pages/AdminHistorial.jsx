@@ -194,7 +194,7 @@ export default function AdminHistorial() {
             <div className="grid gap-3 md:grid-cols-[1.2fr_.6fr_.6fr_.4fr_auto] mb-5">
               <input
                 className="rounded-lg px-3 py-2 border border-gray-300"
-                placeholder="Buscar (caso, título o usuario)"
+                placeholder="Buscar por caso, título o usuario"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") loadCases(); }}
@@ -253,7 +253,7 @@ export default function AdminHistorial() {
             {err && <div className="py-6 text-red-600">{err}</div>}
             {!hasSearched && !loading && !err && (
               <div className="py-6 text-gray-600">
-                Ingresa <b>texto</b> o <b>fecha desde</b> y <b>fecha hasta</b>, define <b>Resultados</b> y presiona <b>Buscar</b>.
+                Ingresa <b>caso, título o usuario</b> o <b>fecha desde</b> y <b>fecha hasta</b>, define <b>Resultados</b> y presiona <b>Buscar</b>.
               </div>
             )}
 
