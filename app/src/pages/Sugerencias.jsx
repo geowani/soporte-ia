@@ -215,7 +215,7 @@ export default function Sugerencias() {
 
           <div className="mx-auto w-full rounded-2xl bg-black/30 backdrop-blur-md p-6 sm:p-8 border border-white/15 shadow-[0_20px_60px_rgba(0,0,0,.45)]">
             <p className="text-slate-200 leading-relaxed mb-6">
-              En este espacio puedes sugerir la inclusión de casos repetitivos que aún no hayan sido agregados
+              En este espacio puedes sugerir la inclusión de casos repetitivos o escalados a niveles superiores que aún no hayan sido agregados
             </p>
 
             <form onSubmit={onSubmit} className="flex flex-col items-center gap-4" noValidate>
