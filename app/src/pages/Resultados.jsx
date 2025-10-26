@@ -87,7 +87,7 @@ export default function Resultados() {
     return t.replace(/\n{3,}/g, "\n\n").trim();
   }
 
-  // === Quitar el encabezado duplicado que a veces viene en la respuesta de IA ===
+  // === Quitar encabezado tipo "Respuesta generada..." duplicado ===
   function stripAiSelfHeader(txt) {
     if (!txt) return "";
     const lines = String(txt).split(/\r?\n/);
@@ -190,23 +190,29 @@ export default function Resultados() {
     navigate(`/resultados?q=${encodeURIComponent(term)}`, { replace: true });
   }, [q, navigate]);
 
-  // showAsideIA:
-  // true cuando:
-  // - hay texto en el input
-  // - no estamos cargando
+  // Mostrar panel IA si:
+  // - hay término
+  // - no está cargando
   // - no hubo error
   // - no hay resultados de BD
-  // - no hay respuesta IA ya generada
+  // - aún no se generó respuesta IA
   const showAsideIA = useMemo(() => {
     return q.trim() && !loading && !error && (items?.length || 0) === 0 && !aiResult;
   }, [q, loading, error, items, aiResult]);
 
+  // mensaje debajo de "Resultados:"
   const emptyMessage = useMemo(() => {
     if (!q.trim()) return "Escribe un término para buscar.";
     if (loading || error) return "";
     if ((items?.length || 0) === 0 && !aiResult) return `Sin coincidencias para “${q}”.`;
     return "";
   }, [q, loading, error, items, aiResult]);
+
+  // 👇 clases dinámicas para el layout
+  // - si mostramos el aside IA (no hubo resultados): 2 columnas en desktop y ancho grande
+  // - si NO mostramos aside IA (sí hubo resultados): 1 columna y ancho más angosto tipo tarjeta centrada
+  const gridColsClass = showAsideIA ? "lg:grid-cols-[2fr_1fr]" : "lg:grid-cols-1";
+  const maxWidthClass = showAsideIA ? "max-w-6xl" : "max-w-4xl";
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
@@ -259,8 +265,10 @@ export default function Resultados() {
           </button>
         </div>
 
-        {/* ======= GRID RESULTADOS + PANEL IA (desktop) ======= */}
-        <div className="mt-5 w-full max-w-6xl grid gap-6 lg:grid-cols-[2fr_1fr] items-start">
+        {/* GRID RESULTADOS + (opcional) PANEL IA escritorio */}
+        <div
+          className={`mt-5 w-full ${maxWidthClass} grid gap-6 ${gridColsClass} items-start`}
+        >
           {/* CARD RESULTADOS */}
           <div className="rounded-2xl bg-slate-200/85 text-slate-900 p-5 md:p-6 border border-white/20 shadow-[0_20px_60px_rgba(0,0,0,.35)]">
             <div className="flex items-center justify-between mb-3">
@@ -347,14 +355,15 @@ export default function Resultados() {
             )}
           </div>
 
-          {/* PANEL IA — DESKTOP (columna derecha en lg) */}
+          {/* PANEL IA — DESKTOP (columna derecha en lg, solo si aplica) */}
           {showAsideIA && (
             <aside className="hidden lg:block rounded-2xl bg-white/80 backdrop-blur-sm p-5 shadow border border-slate-200 text-slate-900">
               <h3 className="text-lg font-bold mb-2">
                 ¿No encontraste lo que buscabas?
               </h3>
               <p className="text-sm text-slate-600 mb-4">
-                Generar una respuesta con IA para:<br />
+                Generar una respuesta con IA para:
+                <br />
                 <b>“{q}”</b>
               </p>
 
@@ -389,7 +398,8 @@ export default function Resultados() {
                 ¿No encontraste lo que buscabas?
               </h3>
               <p className="text-sm text-slate-600 mb-4">
-                Generar una respuesta con IA para:<br />
+                Generar una respuesta con IA para:
+                <br />
                 <b>“{q}”</b>
               </p>
 
