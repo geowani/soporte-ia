@@ -39,6 +39,9 @@ module.exports = async function (context, req) {
       const estado = String(req.query.estado || '').trim().toLowerCase();
       const agenteIdQ = Number(req.query.agenteId || 0);
 
+      // 🔹 nuevo: fecha exacta enviada desde el front (YYYY-MM-DD)
+      const fechaQ = String(req.query.fecha || "").trim();
+
       // dirección de orden
       const sort = String(req.query.sort || 'asc').toLowerCase(); // 'asc' | 'desc'
       const dir = (sort === 'desc') ? 'DESC' : 'ASC';             // default: ASC (viejo -> reciente)
@@ -50,13 +53,36 @@ module.exports = async function (context, req) {
         q.input('term', sql.NVarChar(100), `%${term}%`);
         where += ' AND (s.numero_caso LIKE @term OR s.notas LIKE @term)';
       }
+
       if (estado) {
         q.input('estado', sql.NVarChar(50), estado);
         where += ' AND s.estado = @estado';
       }
+
       if (Number.isInteger(agenteIdQ) && agenteIdQ > 0) {
         q.input('agenteId', sql.Int, agenteIdQ);
         where += ' AND s.agente_id = @agenteId';
+      }
+
+      // 🔹 filtro por fecha: si viene una fecha válida, filtramos todo lo creado ese día
+      if (fechaQ) {
+        // fechaQ viene en formato "YYYY-MM-DD" (porque es el value del <input type="date" />)
+        const fechaObj = new Date(fechaQ);
+
+        // validamos que sea una fecha real
+        if (!isNaN(fechaObj.getTime())) {
+          // construimos rango UTC del día completo
+          const inicio = new Date(fechaObj);
+          inicio.setUTCHours(0, 0, 0, 0);
+
+          const fin = new Date(fechaObj);
+          fin.setUTCHours(23, 59, 59, 999);
+
+          q.input('inicio', sql.DateTime2, inicio);
+          q.input('fin', sql.DateTime2, fin);
+
+          where += ' AND s.creado_en BETWEEN @inicio AND @fin';
+        }
       }
 
       const rs = await q.query(`
@@ -155,8 +181,7 @@ module.exports = async function (context, req) {
           ISNULL(u.correo,'') AS agenteEmail
         FROM dbo.sugerencia s
         LEFT JOIN dbo.usuario u ON u.id_usuario = s.agente_id
-        WHERE LOWER(REPLACE(LTRIM(RTRIM(s.numero_caso)),' ',''))
-              = @n
+        WHERE LOWER(REPLACE(LTRIM(RTRIM(s.numero_caso)),' ','')) = @n
         ORDER BY s.id_sugerencia DESC;
       `);
 
