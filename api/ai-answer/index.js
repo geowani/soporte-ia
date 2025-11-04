@@ -1,5 +1,7 @@
-// /api/ai-answer/index.js  (versión flexible con SQL + Gemini + modo estricto opcional)
+// /api/ai-answer/index.js  (SQL + sugerencia "¿quisiste decir…?" + Gemini + modo estricto opcional)
+
 const sql = require("mssql");
+const didYouMean = require("didyoumean2").default;
 
 /* ------------------ SQL: parsear cadena ADO.NET ------------------ */
 function parseConnStr(connStr = "") {
@@ -21,7 +23,6 @@ function parseConnStr(connStr = "") {
     },
   };
 }
-
 const sqlConfig = parseConnStr(process.env.SQL_CONN_STR || process.env.DB_CONN || "");
 
 /* ------------------ IA: Configuración ------------------ */
@@ -70,7 +71,6 @@ Cierra con [[END]].
 `.trim();
 
 function buildPrompt(q, looksLikeIT, strict) {
-  // En modo estricto y no TI -> prompt breve y canal sin rechazar
   if (strict && !looksLikeIT) {
     return `
 Eres un asistente de soporte TI. El usuario hizo una consulta no TI. 
@@ -79,11 +79,9 @@ No digas "lo siento". Cierra con [[END]].
 Consulta: ${q}
 `.trim();
   }
-  // Si es TI -> prompt TI
   if (looksLikeIT) {
     return `${BASE_PROMPT_TI}\n\nConsulta:\n${q}\n`;
   }
-  // Flexible por defecto
   return `${BASE_PROMPT_FLEX}\n\nConsulta:\n${q}\n`;
 }
 
@@ -94,7 +92,8 @@ function buildContinuationPrompt(soFar) {
 /* ------------------ Utilidades ------------------ */
 function normalize(s = "") {
   return s
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
 }
 
@@ -116,7 +115,6 @@ function extractText(data) {
 /* ------------------ Clasificador TI robusto ------------------ */
 function isSupportRelated(qRaw) {
   const q = normalize(String(qRaw || ""));
-  // Palabras/expresiones típicas TI
   const include = [
     "soporte","ticket","incidencia","fallo","error","reporte","hardware","software",
     "base de datos","database","servidor","server","sql","azure","login","iniciar sesion",
@@ -125,16 +123,16 @@ function isSupportRelated(qRaw) {
     "outlook","office","impresora","printer","licencia","sap","teams","zoom","windows",
     "mac","firewall","router","switch","dba","backup","restauracion","contrasena","contraseña"
   ];
-  // Bloqueos explícitos (evitar falsos positivos con “modelo” genérico)
   const identity = /\b(quien eres|que eres|quien te creo|que modelo eres|eres real)\b/;
   if (identity.test(q)) return false;
-
-  return include.some(w => q.includes(w));
+  return include.some((w) => q.includes(w));
 }
 
 /* ------------------ Gemini API ------------------ */
 async function callGemini({ apiKey, modelName, prompt, maxTokens }) {
-  const url = `https://generativelanguage.googleapis.com/v1/${modelName}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const url = `https://generativelanguage.googleapis.com/v1/${modelName}:generateContent?key=${encodeURIComponent(
+    apiKey
+  )}`;
   const body = {
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: { temperature: TEMP, maxOutputTokens: maxTokens },
@@ -172,8 +170,7 @@ function orderCandidates(available) {
 async function askGeminiWithContinuation(q, looksLikeIT, strict) {
   const key = (process.env.GEMINI_API_KEY || "").trim();
   if (!key) {
-    // Sin clave -> modo demo
-    return `[[END]]`; // evitamos ruido; el frontend lo manejará
+    return `[[END]]`; // sin clave: salida vacía controlada
   }
 
   const available = await listModels(key);
@@ -215,6 +212,114 @@ async function askGeminiWithContinuation(q, looksLikeIT, strict) {
   return stripEnd(out);
 }
 
+/* ------------------ Sugerencias tipo Google (didyoumean2) ------------------ */
+// Cache en memoria (proceso) para no rearmar el diccionario en cada request
+let __DICT_WORDS = null;
+let __DICT_PHRASES = null;
+
+// Divide títulos en palabras normalizadas (>=3 chars)
+function tokenizeTitle(t) {
+  return normalize(String(t || ""))
+    .replace(/[^a-z0-9áéíóúñ\s]/gi, " ")
+    .split(/\s+/)
+    .filter((w) => w && w.length >= 3);
+}
+
+function unique(arr) {
+  return Array.from(new Set(arr));
+}
+
+// Intenta armar diccionario desde BD:
+// 1) Primero intenta con el SP de búsqueda sin filtro (pageSize alto).
+// 2) Si no devuelve nada, intenta con tablas comunes (Casos/Caso) sin romper si no existen.
+async function buildDictionary(pool) {
+  if (__DICT_WORDS && __DICT_PHRASES) return { words: __DICT_WORDS, phrases: __DICT_PHRASES };
+
+  let titles = [];
+  try {
+    // Intento 1: usar tu SP con q vacío (puede que devuelva algo)
+    const r = await pool
+      .request()
+      .input("q", sql.NVarChar, "")
+      .input("page", sql.Int, 1)
+      .input("pageSize", sql.Int, 200)
+      .execute("dbo.sp_caso_buscar_front");
+    titles = (r.recordset || []).map((x) => x.titulo).filter(Boolean);
+  } catch (e) {
+    // Ignorar y probar SELECT directo
+  }
+
+  if (!titles.length) {
+    try {
+      const r2 = await pool.query(`
+        SELECT TOP (500) Titulo 
+        FROM dbo.Casos WITH (NOLOCK)
+        WHERE Titulo IS NOT NULL AND LEN(LTRIM(RTRIM(Titulo))) > 0
+        ORDER BY Id DESC
+      `);
+      titles = (r2.recordset || []).map((x) => x.Titulo).filter(Boolean);
+    } catch {}
+  }
+
+  if (!titles.length) {
+    try {
+      const r3 = await pool.query(`
+        SELECT TOP (500) Titulo 
+        FROM dbo.Caso WITH (NOLOCK)
+        WHERE Titulo IS NOT NULL AND LEN(LTRIM(RTRIM(Titulo))) > 0
+        ORDER BY Id DESC
+      `);
+      titles = (r3.recordset || []).map((x) => x.Titulo).filter(Boolean);
+    } catch {}
+  }
+
+  // Si igual no hay, usa un “seed” mínimo para no romper:
+  if (!titles.length) {
+    titles = [
+      "usuario bloqueado",
+      "error de credenciales",
+      "no puedo iniciar sesión",
+      "pdf no carga en chrome",
+      "contraseña vencida",
+      "no abre formulario",
+      "problemas con correo",
+      "cambio de contraseña",
+    ];
+  }
+
+  const phrases = unique(
+    titles
+      .map((t) => t.toLowerCase().trim())
+      .filter((t) => t && t.length >= 3)
+  );
+
+  const words = unique(
+    titles.flatMap((t) => tokenizeTitle(t))
+  );
+
+  __DICT_WORDS = words;
+  __DICT_PHRASES = phrases;
+  return { words: __DICT_WORDS, phrases: __DICT_PHRASES };
+}
+
+// Devuelve una sugerencia por frase o por token (p. ej., "usuaroi" -> "usuario")
+function suggestQuery(q, words, phrases) {
+  const qNorm = normalize(q).trim();
+  if (!qNorm) return null;
+
+  // 1) Probar sugerencia por frase completa
+  const phrase = didYouMean(qNorm, phrases, { threshold: 0.6 });
+  if (phrase && phrase !== qNorm) return phrase;
+
+  // 2) Probar sugerencia token por token
+  const toks = qNorm.split(/\s+/).filter(Boolean);
+  const fixed = toks.map((t) => didYouMean(t, words, { threshold: 0.6 }) || t);
+  const candidate = fixed.join(" ");
+  if (candidate !== qNorm) return candidate;
+
+  return null;
+}
+
 /* ------------------ Handler principal ------------------ */
 function cors() {
   return {
@@ -236,6 +341,8 @@ module.exports = async function (context, req) {
     const body = req.body && typeof req.body === "object" ? req.body : {};
     const q = String(body.q || "").trim();
     const forceMode = String(body.mode || "").toLowerCase(); // "open" para forzar amplitud
+    const forceOriginal = !!body.forzarOriginal; // si el front quiere usar la query original aunque haya sugerencia
+
     if (!q) {
       context.res = { status: 400, headers: cors(), body: { error: "Falta q" } };
       return;
@@ -249,14 +356,38 @@ module.exports = async function (context, req) {
     if (!forceOpen) {
       try {
         const pool = await sql.connect(sqlConfig);
-        const r = await pool
+
+        // --- BÚSQUEDA 1: con la query original
+        let r = await pool
           .request()
           .input("q", sql.NVarChar, q)
           .input("page", sql.Int, 1)
           .input("pageSize", sql.Int, 3)
           .execute("dbo.sp_caso_buscar_front");
 
-        const resultados = r.recordset || [];
+        let resultados = r.recordset || [];
+        let suggestion = null;
+        let usedQuery = q;
+
+        // Si no hay resultados, intentar sugerencia tipo Google (y reintentar)
+        if (!forceOriginal && resultados.length === 0) {
+          const { words, phrases } = await buildDictionary(pool);
+          suggestion = suggestQuery(q, words, phrases);
+
+          if (suggestion && suggestion !== q.toLowerCase()) {
+            usedQuery = suggestion;
+
+            const r2 = await pool
+              .request()
+              .input("q", sql.NVarChar, usedQuery)
+              .input("page", sql.Int, 1)
+              .input("pageSize", sql.Int, 3)
+              .execute("dbo.sp_caso_buscar_front");
+
+            resultados = r2.recordset || [];
+          }
+        }
+
         if (resultados.length > 0) {
           const top = resultados[0];
           const bullets = resultados
@@ -270,14 +401,18 @@ module.exports = async function (context, req) {
             status: 200,
             headers: cors(),
             body: {
-              mode: "db",
+              mode: suggestion ? "db-suggested" : "db",
               query: q,
+              usedQuery,              // para que el front muestre "Se muestran resultados de X"
+              suggestion,             // para que el front ofrezca "Buscar, en cambio, q"
               casoSugeridoId: top.id,
               answer: `Encontré casos relacionados en la base de datos:\n\n${bullets}\n\nSugerencia principal: **${top.codigo} – ${top.titulo}**\nResumen: ${top.descripcion}\n[[END]]`,
             },
           };
           return;
         }
+
+        // Si llegamos aquí, no hubo resultados ni con sugerencia -> seguimos a IA
       } catch (err) {
         context.log("SQL ERROR:", err?.message);
         // Continuamos hacia IA aunque la BD falle
