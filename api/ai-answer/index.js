@@ -1,4 +1,4 @@
-// api/ai-answer/index.js (versión protegida para uso en Genpact)
+// /api/ai-answer/index.js  (versión flexible con SQL + Gemini + modo estricto opcional)
 const sql = require("mssql");
 
 /* ------------------ SQL: parsear cadena ADO.NET ------------------ */
@@ -11,21 +11,18 @@ function parseConnStr(connStr = "") {
   });
   return {
     server: (parts["server"] || "").replace("tcp:", "").split(",")[0],
-    port: parts["server"]?.includes(",")
-      ? parseInt(parts["server"].split(",")[1])
-      : 1433,
-    database: parts["database"],
-    user: parts["user id"],
+    port: parts["server"]?.includes(",") ? parseInt(parts["server"].split(",")[1]) : 1433,
+    database: parts["database"] || parts["initial catalog"],
+    user: parts["user id"] || parts["user"],
     password: parts["password"],
     options: {
       encrypt: (parts["encrypt"] || "true").toLowerCase() === "true",
-      trustServerCertificate:
-        (parts["trustservercertificate"] || "false").toLowerCase() === "true",
+      trustServerCertificate: (parts["trustservercertificate"] || "false").toLowerCase() === "true",
     },
   };
 }
 
-const sqlConfig = parseConnStr(process.env.SQL_CONN_STR || "");
+const sqlConfig = parseConnStr(process.env.SQL_CONN_STR || process.env.DB_CONN || "");
 
 /* ------------------ IA: Configuración ------------------ */
 const MODELS_PREFERRED = [
@@ -35,20 +32,17 @@ const MODELS_PREFERRED = [
   "models/gemini-1.5-pro",
 ];
 
-const TEMP = 0.2;
-const MAX_OUTPUT_TOKENS_FIRST = 1200;
-const MAX_OUTPUT_TOKENS_CONT = 800;
+const TEMP = 0.25;
+const MAX_OUTPUT_TOKENS_FIRST = 1100;
+const MAX_OUTPUT_TOKENS_CONT = 700;
 const MAX_CONTINUATIONS = 2;
 
-/* ------------------ Prompt ajustado al contexto Genpact ------------------ */
-function buildPrompt(q) {
-  return `Eres un asistente especializado en soporte técnico de Genpact.
-Tu única función es brindar orientación sobre incidencias, software, hardware, bases de datos, redes o flujos de atención al cliente dentro del entorno empresarial.
-No reveles información sobre ti mismo, tu origen, tus creadores ni el modelo de IA que utilizas.
-Si la pregunta no está relacionada con soporte técnico, responde de forma neutra:
-"Lo siento, solo puedo responder consultas relacionadas con soporte técnico o incidencias del sistema."
+/* ------------------ Prompts ------------------ */
+const BASE_PROMPT_TI = `
+Eres un asistente especializado en soporte técnico empresarial.
+Objetivo: dar orientación clara, accionable y breve (listas de pasos) sobre incidencias, software, hardware, redes, accesos, contraseñas, VPN, correo, SAP, SQL/DBA, Azure, Windows/macOS, impresoras, permisos, etc.
 
-Cuando sí sea una consulta válida, responde con EXACTAMENTE 3 ALTERNATIVAS numeradas del 1 al 3:
+Formato EXACTO:
 1) <título corto>
 - paso 1
 - paso 2
@@ -64,17 +58,46 @@ Cuando sí sea una consulta válida, responde con EXACTAMENTE 3 ALTERNATIVAS num
 - paso 2
 - paso 3
 
-Cierra siempre con [[END]].`;
+Cierra SIEMPRE con [[END]].
+No inventes datos. No incluyas disclaimers innecesarios. Español neutro.
+`.trim();
+
+const BASE_PROMPT_FLEX = `
+Eres un asistente técnico útil. Si la consulta es de TI, responde como soporte (pasos concretos).
+Si NO es de TI, igualmente brinda una guía breve, responsable y práctica (en 4-6 líneas) y sugiere el canal correcto si aplica.
+Evita rechazar en seco. Español neutro. Usa el mismo formato de "3 alternativas" cuando tenga sentido.
+Cierra con [[END]].
+`.trim();
+
+function buildPrompt(q, looksLikeIT, strict) {
+  // En modo estricto y no TI -> prompt breve y canal sin rechazar
+  if (strict && !looksLikeIT) {
+    return `
+Eres un asistente de soporte TI. El usuario hizo una consulta no TI. 
+Responde en 5-7 líneas con orientación general breve y sugiere el área/canal correcto. 
+No digas "lo siento". Cierra con [[END]].
+Consulta: ${q}
+`.trim();
+  }
+  // Si es TI -> prompt TI
+  if (looksLikeIT) {
+    return `${BASE_PROMPT_TI}\n\nConsulta:\n${q}\n`;
+  }
+  // Flexible por defecto
+  return `${BASE_PROMPT_FLEX}\n\nConsulta:\n${q}\n`;
 }
 
 function buildContinuationPrompt(soFar) {
-  return `Continúa la respuesta anterior sin repetir texto, manteniendo formato y tono técnico.
-Finaliza con [[END]].
-Texto previo:
-${soFar}`;
+  return `Continúa la respuesta anterior sin repetir texto. Mantén tono y formato. Finaliza con [[END]].\nTexto previo:\n${soFar}`;
 }
 
-/* ------------------ Funciones auxiliares ------------------ */
+/* ------------------ Utilidades ------------------ */
+function normalize(s = "") {
+  return s
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
 function isComplete(txt = "") {
   return /\n?\s*3\)\s/.test(txt) && /\[\[END\]\]\s*$/.test(txt);
 }
@@ -90,53 +113,28 @@ function extractText(data) {
   }
 }
 
-/* ------------------ Verificación de tema ------------------ */
-function isSupportRelated(q) {
-  const techWords = [
-    "soporte",
-    "ticket",
-    "incidencia",
-    "fallo",
-    "error",
-    "reporte",
-    "hardware",
-    "software",
-    "base de datos",
-    "servidor",
-    "sql",
-    "fastapi",
-    "azure",
-    "login",
-    "react",
-    "red",
-    "vpn",
-    "instalación",
-    "configuración",
-    "driver",
-    "equipo",
-    "sistema",
+/* ------------------ Clasificador TI robusto ------------------ */
+function isSupportRelated(qRaw) {
+  const q = normalize(String(qRaw || ""));
+  // Palabras/expresiones típicas TI
+  const include = [
+    "soporte","ticket","incidencia","fallo","error","reporte","hardware","software",
+    "base de datos","database","servidor","server","sql","azure","login","iniciar sesion",
+    "credencial","acceso","bloqueo","permiso","react","fastapi","dotnet","c#","node",
+    "red","vpn","instalacion","configuracion","driver","equipo","sistema","correo",
+    "outlook","office","impresora","printer","licencia","sap","teams","zoom","windows",
+    "mac","firewall","router","switch","dba","backup","restauracion","contrasena","contraseña"
   ];
-  const forbidden = [
-    "quién eres",
-    "qué eres",
-    "quién te creó",
-    "qué es gemini",
-    "modelo",
-    "openai",
-    "google",
-    "ia eres",
-    "eres real",
-  ];
-  const lower = q.toLowerCase();
-  if (forbidden.some((f) => lower.includes(f))) return false;
-  return techWords.some((w) => lower.includes(w));
+  // Bloqueos explícitos (evitar falsos positivos con “modelo” genérico)
+  const identity = /\b(quien eres|que eres|quien te creo|que modelo eres|eres real)\b/;
+  if (identity.test(q)) return false;
+
+  return include.some(w => q.includes(w));
 }
 
-/* ------------------ Comunicación con Gemini API ------------------ */
+/* ------------------ Gemini API ------------------ */
 async function callGemini({ apiKey, modelName, prompt, maxTokens }) {
-  const url = `https://generativelanguage.googleapis.com/v1/${modelName}:generateContent?key=${encodeURIComponent(
-    apiKey
-  )}`;
+  const url = `https://generativelanguage.googleapis.com/v1/${modelName}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const body = {
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: { temperature: TEMP, maxOutputTokens: maxTokens },
@@ -153,9 +151,7 @@ async function callGemini({ apiKey, modelName, prompt, maxTokens }) {
 async function listModels(key) {
   try {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models?key=${encodeURIComponent(
-        key
-      )}`
+      `https://generativelanguage.googleapis.com/v1/models?key=${encodeURIComponent(key)}`
     );
     const data = await res.json();
     return (data.models || []).map((m) => m.name);
@@ -173,22 +169,25 @@ function orderCandidates(available) {
   });
 }
 
-/* ------------------ Lógica de llamada ------------------ */
-async function askGeminiWithContinuation(q) {
+async function askGeminiWithContinuation(q, looksLikeIT, strict) {
   const key = (process.env.GEMINI_API_KEY || "").trim();
-  if (!key) return "[Error] Falta GEMINI_API_KEY";
+  if (!key) {
+    // Sin clave -> modo demo
+    return `[[END]]`; // evitamos ruido; el frontend lo manejará
+  }
 
   const available = await listModels(key);
-  const prompt = buildPrompt(q);
   const candidates = orderCandidates(available);
 
   let out = "";
+  const firstPrompt = buildPrompt(q, looksLikeIT, strict);
+
   for (const modelName of candidates) {
     try {
       out = await callGemini({
         apiKey: key,
         modelName,
-        prompt,
+        prompt: firstPrompt,
         maxTokens: MAX_OUTPUT_TOKENS_FIRST,
       });
       if (out) break;
@@ -217,98 +216,96 @@ async function askGeminiWithContinuation(q) {
 }
 
 /* ------------------ Handler principal ------------------ */
+function cors() {
+  return {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  };
+}
+
 module.exports = async function (context, req) {
   const t0 = Date.now();
   try {
-    const { q, forceAi } = req.body || {};
-    if (!q || !q.trim()) {
-      context.res = { status: 400, body: { error: "Falta q" } };
+    if (req.method === "OPTIONS") {
+      context.res = { status: 204, headers: cors() };
       return;
     }
 
-    // 🔹 Filtro temático: solo responder sobre soporte técnico
-    if (!isSupportRelated(q)) {
-      context.res = {
-        status: 200,
-        body: {
-          mode: "filtered",
-          query: q,
-          answer:
-            "Lo siento, solo puedo responder consultas relacionadas con soporte técnico o incidencias del sistema.",
-        },
-      };
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    const q = String(body.q || "").trim();
+    const forceMode = String(body.mode || "").toLowerCase(); // "open" para forzar amplitud
+    if (!q) {
+      context.res = { status: 400, headers: cors(), body: { error: "Falta q" } };
       return;
     }
 
-    // 🔹 IA directa (modo pruebas)
-    if (forceAi === true) {
-      const ai = await askGeminiWithContinuation(q);
-      context.res = {
-        status: 200,
-        body: {
-          mode: "ai",
-          query: q,
-          answer: `Respuesta generada automáticamente:\n\n${ai}`,
-          debug: { ms: Date.now() - t0 },
-        },
-      };
-      return;
+    const STRICT = String(process.env.STRICT_SUPPORT || "").toLowerCase() === "true";
+    const looksLikeIT = isSupportRelated(q);
+    const forceOpen = forceMode === "open";
+
+    // 1) Buscar en BD (solo si no forzamos modo abierto)
+    if (!forceOpen) {
+      try {
+        const pool = await sql.connect(sqlConfig);
+        const r = await pool
+          .request()
+          .input("q", sql.NVarChar, q)
+          .input("page", sql.Int, 1)
+          .input("pageSize", sql.Int, 3)
+          .execute("dbo.sp_caso_buscar_front");
+
+        const resultados = r.recordset || [];
+        if (resultados.length > 0) {
+          const top = resultados[0];
+          const bullets = resultados
+            .map(
+              (c, i) =>
+                `- #${i + 1} ${c.codigo}: ${c.titulo} (${c.sistema || ""}/${c.sistema_det || ""})`
+            )
+            .join("\n");
+
+          context.res = {
+            status: 200,
+            headers: cors(),
+            body: {
+              mode: "db",
+              query: q,
+              casoSugeridoId: top.id,
+              answer: `Encontré casos relacionados en la base de datos:\n\n${bullets}\n\nSugerencia principal: **${top.codigo} – ${top.titulo}**\nResumen: ${top.descripcion}\n[[END]]`,
+            },
+          };
+          return;
+        }
+      } catch (err) {
+        context.log("SQL ERROR:", err?.message);
+        // Continuamos hacia IA aunque la BD falle
+      }
     }
 
-    // 1) Buscar en BD
-    let resultados = [];
-    try {
-      const pool = await sql.connect(sqlConfig);
-      const r = await pool
-        .request()
-        .input("q", sql.NVarChar, q)
-        .input("page", sql.Int, 1)
-        .input("pageSize", sql.Int, 3)
-        .execute("dbo.sp_caso_buscar_front");
-      resultados = r.recordset || [];
-    } catch (err) {
-      context.log("SQL ERROR:", err.message);
-    }
+    // 2) IA (flexible por defecto; estricto solo si STRICT_SUPPORT=true)
+    const ai = await askGeminiWithContinuation(q, looksLikeIT, STRICT && !forceOpen);
 
-    // 2) Si hay resultados -> devolverlos
-    if (resultados.length > 0) {
-      const top = resultados[0];
-      const bullets = resultados
-        .map(
-          (c, i) =>
-            `- #${i + 1} ${c.codigo}: ${c.titulo} (${c.sistema || ""}/${c.sistema_det || ""})`
-        )
-        .join("\n");
+    // Blindaje: si quedó vacío (p.ej., sin clave), da una guía mínima
+    const answer =
+      (ai && ai.trim()) ||
+      (looksLikeIT
+        ? `1) Verifica datos de la incidencia\n- Reúne síntomas y mensajes de error\n- Identifica módulo/área afectada\n- Intenta reproducir el problema\n\n2) Accesos y dependencias\n- Valida credenciales/permisos\n- Revisa conectividad/VPN\n- Confirma versiones/instalación\n\n3) Escalamiento\n- Registra el ticket con evidencias\n- Asigna prioridad y responsable\n- Documenta solución y lecciones\n[[END]]`
+        : `1) Aclara el objetivo\n- Resume el contexto\n- Define el resultado esperado\n- Lista restricciones\n\n2) Primeros pasos prácticos\n- Identifica fuentes confiables\n- Compara 2–3 alternativas\n- Establece un checklist\n\n3) Siguiente acción\n- Documenta lo decidido\n- Establece un responsable\n- Define fecha de revisión\n[[END]]`);
 
-      context.res = {
-        status: 200,
-        body: {
-          mode: "db",
-          query: q,
-          casoSugeridoId: top.id,
-          answer: `Encontré casos relacionados en la base de datos:\n\n${bullets}\n\nSugerencia principal: **${top.codigo} – ${top.titulo}**\nResumen: ${top.descripcion}`,
-        },
-      };
-      return;
-    }
-
-    // 3) Si no hay resultados -> IA con continuidad
-    const ai = await askGeminiWithContinuation(q);
     context.res = {
       status: 200,
+      headers: cors(),
       body: {
-        mode: "ai",
+        mode: looksLikeIT ? "ai-it" : (STRICT && !forceOpen ? "ai-brief" : "ai-open"),
         query: q,
-        casoSugeridoId: null,
-        answer: `Respuesta generada automáticamente:\n\n${ai}`,
-        debug: { ms: Date.now() - t0 },
+        answer,
+        debug: { ms: Date.now() - t0, looksLikeIT, STRICT, forceOpen },
       },
     };
   } catch (e) {
     context.log(e);
-    context.res = {
-      status: 500,
-      body: { error: "Error procesando la solicitud" },
-    };
+    context.res = { status: 500, headers: cors(), body: { error: "Error procesando la solicitud" } };
   }
 };
