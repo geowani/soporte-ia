@@ -9,7 +9,7 @@ export default function Resultados() {
 
   const urlQ = new URLSearchParams(location.search).get("q") || "";
 
-  // Si venimos de doSearch con prefetch, úsalo para inicializar y evitar "rectángulo vacío"
+  // Prefetch/hidratación inicial
   const initialPrefetched =
     location.state &&
     location.state.prefetched &&
@@ -24,23 +24,22 @@ export default function Resultados() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // ===== IA bajo demanda =====
+  // IA bajo demanda
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
   const [aiResult, setAiResult] = useState(null);
 
-  // ===== Meta de sugerencias (¿quisiste decir…?) =====
-  const [aiMeta, setAiMeta] = useState(initialPrefetched?.aiMeta || null); // { mode, query, usedQuery?, suggestion? }
+  // Meta sugerencias
+  const [aiMeta, setAiMeta] = useState(initialPrefetched?.aiMeta || null);
 
   const lastRegisteredRef = useRef(null);
   const hydratedForRef = useRef(initialPrefetched ? urlQ : null);
 
-  // === Helpers ===
   function getUserId() {
     const raw = localStorage.getItem("userId");
     const id = Number(raw);
     return Number.isFinite(id) && id > 0 ? id : null;
-  }
+    }
 
   async function registrarBusqueda(term, { casoId = null, score = null } = {}) {
     const userId = getUserId();
@@ -60,14 +59,12 @@ export default function Resultados() {
         headers,
         body: JSON.stringify(body),
       });
-    } catch {
-      // silencioso
-    }
+    } catch {}
   }
 
   useEffect(() => setQ(urlQ), [urlQ]);
 
-  // === Limpieza de Markdown ===
+  // Utilidades de limpieza
   function cleanMarkdown(s) {
     if (!s) return "";
     let t = String(s)
@@ -92,7 +89,6 @@ export default function Resultados() {
     return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
   }
 
-  // === Eliminar texto innecesario de la IA ===
   function stripDbSummaryBlocks(txt) {
     if (!txt) return "";
     let t = String(txt);
@@ -105,15 +101,12 @@ export default function Resultados() {
     return t.replace(/\n{3,}/g, "\n\n").trim();
   }
 
-  // === Quitar encabezado tipo "Respuesta generada..." duplicado ===
   function stripAiSelfHeader(txt) {
     if (!txt) return "";
     const lines = String(txt).split(/\r?\n/);
     if (
       lines.length &&
-      /^\s*respuesta\s+generada\s+con\s+inteligencia\s+artificial:?\s*$/i.test(
-        lines[0]
-      )
+      /^\s*respuesta\s+generada\s+con\s+inteligencia\s+artificial:?\s*$/i.test(lines[0])
     ) {
       lines.shift();
       while (lines.length && /^\s*$/.test(lines[0])) lines.shift();
@@ -121,7 +114,6 @@ export default function Resultados() {
     return lines.join("\n");
   }
 
-  // === Eliminar emojis (seguro) ===
   function removeEmojis(text) {
     if (!text) return "";
     try {
@@ -131,11 +123,10 @@ export default function Resultados() {
     }
   }
 
-  // === META IA (ligera): obtener suggestion/usedQuery sin generar texto ===
+  // META IA (ligera)
   async function getAiMetaLight(term, { forzarOriginal = false } = {}) {
     const texto = String(term ?? "").trim();
     if (!texto) return null;
-
     try {
       const res = await fetch("/api/ai-answer", {
         method: "POST",
@@ -155,7 +146,7 @@ export default function Resultados() {
     }
   }
 
-  // ======= META: obtener suggestion/usedQuery del backend (para forzar original desde el banner) =======
+  // Para forzar original desde banner (aunque lo vamos a ocultar)
   const fetchAiMeta = useCallback(async (term, { forzarOriginal = false } = {}) => {
     const texto = String(term ?? "").trim();
     if (!texto) {
@@ -180,12 +171,22 @@ export default function Resultados() {
     }
   }, []);
 
-  // === Buscar en BD (con autocorrección previa)
+  // Normalizar meta para NO mostrar banner si ya autocorregimos
+  function normalizeMetaAfterAutocorrect(meta, original, effective) {
+    if (!meta) return null;
+    if (effective !== original) {
+      // neutraliza la condición del banner
+      return { ...meta, query: effective, usedQuery: effective };
+    }
+    return meta;
+  }
+
+  // Buscar en BD (con autocorrección previa)
   const runSearch = useCallback(
     async (term) => {
       const original = String(term ?? "").trim();
 
-      // Si ya hidratamos exactamente este término, evita re-buscar
+      // Evita re-buscar si ya hidratamos exactamente este término
       if (hydratedForRef.current === original) return;
 
       if (!original) {
@@ -207,22 +208,22 @@ export default function Resultados() {
       setAiMeta(null);
 
       try {
-        // 1) Pedir sugerencia primero
-        const meta = await getAiMetaLight(original);
+        // 1) Sugerencia primero
+        const metaRaw = await getAiMetaLight(original);
         const effective =
-          meta?.usedQuery && meta.usedQuery !== original ? meta.usedQuery : original;
+          metaRaw?.usedQuery && metaRaw.usedQuery !== original ? metaRaw.usedQuery : original;
 
+        // 2) Normaliza meta para no disparar el banner
+        const meta = normalizeMetaAfterAutocorrect(metaRaw, original, effective);
         if (meta) setAiMeta(meta);
 
         // Reflejar término efectivo en URL/estado si difiere
         if (effective !== original) {
           setQ(effective);
-          navigate(`/resultados?q=${encodeURIComponent(effective)}`, {
-            replace: true,
-          });
+          navigate(`/resultados?q=${encodeURIComponent(effective)}`, { replace: true });
         }
 
-        // 2) Registrar y buscar con el término EFECTIVO
+        // 3) Registrar + buscar
         if (lastRegisteredRef.current !== effective) {
           await registrarBusqueda(effective);
           lastRegisteredRef.current = effective;
@@ -241,7 +242,7 @@ export default function Resultados() {
     [navigate]
   );
 
-  // === Generar con IA (texto largo)
+  // IA larga
   const generateAi = useCallback(async () => {
     const texto = q.trim();
     if (!texto) return;
@@ -270,11 +271,14 @@ export default function Resultados() {
     }
   }, [q]);
 
-  // Hidratación desde location.state (y limpieza de state)
+  // Hidratación desde location.state
   useEffect(() => {
     const st = location.state;
     if (st?.prefetched && st.prefetched.q === urlQ) {
-      const { items: pfItems, total: pfTotal, aiMeta: pfMeta } = st.prefetched;
+      const { items: pfItems, total: pfTotal, aiMeta: pfMetaRaw, q: qEff } = st.prefetched;
+      // Normaliza meta al hidratar
+      const pfMeta = normalizeMetaAfterAutocorrect(pfMetaRaw, urlQ, qEff);
+
       setItems(pfItems || []);
       setTotal(pfTotal || 0);
       if (pfMeta) setAiMeta(pfMeta);
@@ -282,13 +286,12 @@ export default function Resultados() {
       setLoading(false);
       hydratedForRef.current = urlQ;
 
-      // Limpia el state para evitar rehidrataciones en back/forward
       navigate(location.pathname + location.search, { replace: true, state: null });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.key]);
 
-  // Si no venimos con prefetch, ejecuta búsqueda normal (autocorrección previa)
+  // Si no venimos con prefetch, ejecuta búsqueda normal
   useEffect(() => {
     if (!initialPrefetched) {
       runSearch(urlQ);
@@ -296,50 +299,45 @@ export default function Resultados() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlQ]);
 
-  // --- BÚSQUEDA con Prefetch + Hydrate desde el buscador ---
+  // doSearch con Prefetch + Hydrate
   const doSearch = useCallback(async () => {
     const original = q.trim();
     if (!original) return;
 
-    // 1) Autocorrección ligera primero
-    const meta = await getAiMetaLight(original);
+    // 1) Autocorrección ligera
+    const metaRaw = await getAiMetaLight(original);
     const effective =
-      meta?.usedQuery && meta.usedQuery !== original ? meta.usedQuery : original;
+      metaRaw?.usedQuery && metaRaw.usedQuery !== original ? metaRaw.usedQuery : original;
 
-    // 2) Registrar con la query efectiva
+    // 2) Registrar con query efectiva
     if (lastRegisteredRef.current !== effective) {
       await registrarBusqueda(effective);
       lastRegisteredRef.current = effective;
     }
 
-    // 3) Prefetch de resultados ANTES de navegar
+    // 3) Prefetch antes de navegar
     let prefetched = { items: [], total: 0 };
     try {
       const r = await buscarCasos({ q: effective, page: 1, pageSize: 20 });
       prefetched.items = r?.items || [];
       prefetched.total = r?.total ?? prefetched.items.length;
-    } catch {
-      // si falla, igual navegamos y que lo intente runSearch
-    }
+    } catch {}
 
-    // 4) Navegar ya con datos y meta
+    // 4) Normaliza meta para no mostrar banner
+    const meta = normalizeMetaAfterAutocorrect(metaRaw, original, effective);
+
+    // 5) Navegar ya con datos + meta normalizada
     navigate(`/resultados?q=${encodeURIComponent(effective)}`, {
       replace: true,
       state: { prefetched: { ...prefetched, q: effective, aiMeta: meta || null } },
     });
   }, [q, navigate]);
 
-  // Mostrar panel IA si:
-  // - hay término
-  // - no está cargando
-  // - no hubo error
-  // - no hay resultados de BD
-  // - aún no se generó respuesta IA
+  // Panel IA condicional
   const showAsideIA = useMemo(() => {
     return q.trim() && !loading && !error && (items?.length || 0) === 0 && !aiResult;
   }, [q, loading, error, items, aiResult]);
 
-  // mensaje debajo de "Resultados:"
   const emptyMessage = useMemo(() => {
     if (!q.trim()) return "Escribe un término para buscar.";
     if (loading || error) return "";
@@ -347,14 +345,13 @@ export default function Resultados() {
     return "";
   }, [q, loading, error, items, aiResult]);
 
-  // Layout dinámico
   const gridColsClass = showAsideIA
     ? "lg:grid-cols-[1fr_minmax(340px,380px)] lg:gap-4"
     : "lg:grid-cols-1 lg:gap-0";
 
   const maxWidthClass = showAsideIA ? "max-w-6xl" : "max-w-4xl";
 
-  // Handlers para el banner tipo Google
+  // Handlers (el banner no saldrá, pero los dejamos por compatibilidad)
   const handleUseSuggested = useCallback(() => {
     if (!aiMeta?.usedQuery) return;
     setQ(aiMeta.usedQuery);
@@ -409,11 +406,7 @@ export default function Resultados() {
             onClick={doSearch}
             className="m-1 h-10 w-10 rounded-full grid place-items-center bg-slate-300/80 hover:scale-105 transition"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              className="h-5 w-5 fill-slate-700"
-            >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5 fill-slate-700">
               <path d="M15.5 14h-.79l-.28-.27a6.471 6.471 0 0 0 1.57-4.23C16 6.01 12.99 3 9.5 3S3 6.01 3 9.5 6.01 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99 1.49-1.49-4.99-5zM9.5 14C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
             </svg>
           </button>
@@ -432,18 +425,9 @@ export default function Resultados() {
               )}
             </div>
 
-            {/* Banner tipo Google si backend sugirió otra query */}
+            {/* Banner neutralizado: la condición nunca se cumple por la normalización */}
             {aiMeta?.usedQuery && aiMeta.usedQuery !== aiMeta.query && (
-              <div className="mb-3 text-sm text-slate-600">
-                Se muestran resultados de{" "}
-                <button className="underline" onClick={handleUseSuggested}>
-                  {aiMeta.usedQuery}
-                </button>
-                .{" "}
-                <button className="underline" onClick={handleForceOriginal}>
-                  Buscar, en cambio, {aiMeta.query}
-                </button>
-              </div>
+              <div className="hidden" />
             )}
 
             {!!error && (
@@ -452,7 +436,7 @@ export default function Resultados() {
               </div>
             )}
 
-            {/* Si hay resultados de BD */}
+            {/* Resultados de BD */}
             {!loading && !error && items?.length > 0 && (
               <div className="max-h-[60vh] overflow-y-auto pr-2">
                 {items.map((c, i) => (
@@ -474,22 +458,18 @@ export default function Resultados() {
                     </div>
                     <div className="text-slate-800 mt-1">
                       {c.asunto && <span className="font-semibold">{c.asunto}. </span>}
-                      <span className="text-blue-600">
-                        Descripción: {c.descripcion}
-                      </span>
+                      <span className="text-blue-600">Descripción: {c.descripcion}</span>
                     </div>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Si NO hay resultados */}
+            {/* Sin resultados */}
             {!loading && !error && (items?.length || 0) === 0 && q.trim() && (
               <div className="mt-2">
                 {aiLoading && (
-                  <div className="text-slate-700 animate-pulse">
-                    Generando respuesta con IA…
-                  </div>
+                  <div className="text-slate-700 animate-pulse">Generando respuesta con IA…</div>
                 )}
 
                 {!aiLoading && !aiResult && (
@@ -502,9 +482,7 @@ export default function Resultados() {
                       Respuesta generada con inteligencia artificial:
                     </div>
                     {removeEmojis(
-                      stripAiSelfHeader(
-                        cleanMarkdown(stripDbSummaryBlocks(aiResult.answer))
-                      )
+                      stripAiSelfHeader(cleanMarkdown(stripDbSummaryBlocks(aiResult.answer)))
                     ) || (
                       <span className="text-slate-600 italic">
                         No se generó texto. Intenta de nuevo.
@@ -516,7 +494,7 @@ export default function Resultados() {
             )}
           </div>
 
-          {/* PANEL IA — DESKTOP (columna derecha en lg, solo si aplica) */}
+          {/* PANEL IA — DESKTOP */}
           {showAsideIA && (
             <aside className="hidden lg:block lg:w-[360px] lg:max-w-[380px] rounded-2xl bg-white/80 backdrop-blur-sm p-5 shadow border border-slate-200 text-slate-900">
               <h3 className="text-lg font-bold mb-2">¿No encontraste lo que buscabas?</h3>
@@ -549,7 +527,7 @@ export default function Resultados() {
           )}
         </div>
 
-        {/* PANEL IA — MÓVIL (debajo de resultados en <lg) */}
+        {/* PANEL IA — MÓVIL */}
         {showAsideIA && (
           <section className="lg:hidden w-full max-w-6xl px-0 mt-4">
             <div className="rounded-2xl bg-white/80 backdrop-blur-sm p-5 shadow border border-slate-200 text-slate-900">
