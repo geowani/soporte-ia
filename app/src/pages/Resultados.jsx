@@ -121,7 +121,31 @@ export default function Resultados() {
     }
   }
 
-  // ======= META: obtener suggestion/usedQuery del backend =======
+  // === META IA (ligera): obtener suggestion/usedQuery sin generar texto ===
+  async function getAiMetaLight(term, { forzarOriginal = false } = {}) {
+    const texto = String(term ?? "").trim();
+    if (!texto) return null;
+
+    try {
+      const res = await fetch("/api/ai-answer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ q: texto, forzarOriginal }),
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return {
+        mode: data?.mode || null,
+        query: data?.query || texto,
+        usedQuery: data?.usedQuery || null,
+        suggestion: data?.suggestion || null,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  // ======= META: obtener suggestion/usedQuery del backend (para forzar original desde el banner) =======
   const fetchAiMeta = useCallback(async (term, { forzarOriginal = false } = {}) => {
     const texto = String(term ?? "").trim();
     if (!texto) {
@@ -135,7 +159,6 @@ export default function Resultados() {
         body: JSON.stringify({ q: texto, forzarOriginal }),
       });
       const data = await res.json();
-      // Guardamos solo lo necesario para el banner
       setAiMeta({
         mode: data?.mode || null,
         query: data?.query || texto,
@@ -143,14 +166,14 @@ export default function Resultados() {
         suggestion: data?.suggestion || null,
       });
     } catch {
-      setAiMeta(null); // si falla, simplemente no mostramos banner
+      setAiMeta(null);
     }
   }, []);
 
-  // === Buscar en BD ===
+  // === Buscar en BD (ahora con autocorrección previa) ===
   const runSearch = useCallback(async (term) => {
-    const texto = String(term ?? "").trim();
-    if (!texto) {
+    const original = String(term ?? "").trim();
+    if (!original) {
       setItems([]);
       setTotal(0);
       setError("");
@@ -169,24 +192,36 @@ export default function Resultados() {
     setAiMeta(null);
 
     try {
-      if (lastRegisteredRef.current !== texto) {
-        await registrarBusqueda(texto);
-        lastRegisteredRef.current = texto;
+      // 1) Pedir sugerencia primero
+      const meta = await getAiMetaLight(original);
+      const effective = meta?.usedQuery && meta.usedQuery !== original
+        ? meta.usedQuery
+        : original;
+
+      if (meta) setAiMeta(meta);
+
+      // Reflejar término efectivo en URL/estado si difiere
+      if (effective !== original) {
+        setQ(effective);
+        navigate(`/resultados?q=${encodeURIComponent(effective)}`, { replace: true });
       }
 
-      const r = await buscarCasos({ q: texto, page: 1, pageSize: 20 });
+      // 2) Registrar y buscar con el término EFECTIVO
+      if (lastRegisteredRef.current !== effective) {
+        await registrarBusqueda(effective);
+        lastRegisteredRef.current = effective;
+      }
+
+      const r = await buscarCasos({ q: effective, page: 1, pageSize: 20 });
       const arr = r.items || [];
       setItems(arr);
       setTotal(r.total ?? arr.length);
-
-      // Traer suggestion/usedQuery para el banner (ligero; ignora texto IA)
-      fetchAiMeta(texto);
     } catch (e) {
       setError(e?.message || "Error al buscar casos");
     } finally {
       setLoading(false);
     }
-  }, [fetchAiMeta]);
+  }, [navigate]);
 
   // === Generar con IA (texto largo) ===
   const generateAi = useCallback(async () => {
@@ -272,7 +307,6 @@ export default function Resultados() {
 
   const handleForceOriginal = useCallback(async () => {
     if (!aiMeta?.query) return;
-    // Refresca meta sin sugerencia (forzar original) y re-navega
     await fetchAiMeta(aiMeta.query, { forzarOriginal: true });
     setQ(aiMeta.query);
     navigate(`/resultados?q=${encodeURIComponent(aiMeta.query)}`, { replace: true });
