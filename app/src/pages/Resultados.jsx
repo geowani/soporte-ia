@@ -20,6 +20,9 @@ export default function Resultados() {
   const [aiError, setAiError] = useState("");
   const [aiResult, setAiResult] = useState(null);
 
+  // ===== Meta de sugerencias (¿quisiste decir…?) =====
+  const [aiMeta, setAiMeta] = useState(null); // { mode, query, usedQuery?, suggestion? }
+
   const lastRegisteredRef = useRef(null);
 
   // === Helpers ===
@@ -118,6 +121,32 @@ export default function Resultados() {
     }
   }
 
+  // ======= META: obtener suggestion/usedQuery del backend =======
+  const fetchAiMeta = useCallback(async (term, { forzarOriginal = false } = {}) => {
+    const texto = String(term ?? "").trim();
+    if (!texto) {
+      setAiMeta(null);
+      return;
+    }
+    try {
+      const res = await fetch("/api/ai-answer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ q: texto, forzarOriginal }),
+      });
+      const data = await res.json();
+      // Guardamos solo lo necesario para el banner
+      setAiMeta({
+        mode: data?.mode || null,
+        query: data?.query || texto,
+        usedQuery: data?.usedQuery || null,
+        suggestion: data?.suggestion || null,
+      });
+    } catch {
+      setAiMeta(null); // si falla, simplemente no mostramos banner
+    }
+  }, []);
+
   // === Buscar en BD ===
   const runSearch = useCallback(async (term) => {
     const texto = String(term ?? "").trim();
@@ -127,6 +156,7 @@ export default function Resultados() {
       setError("");
       setAiResult(null);
       setAiError("");
+      setAiMeta(null);
       return;
     }
 
@@ -136,6 +166,7 @@ export default function Resultados() {
     setTotal(0);
     setAiResult(null);
     setAiError("");
+    setAiMeta(null);
 
     try {
       if (lastRegisteredRef.current !== texto) {
@@ -147,14 +178,17 @@ export default function Resultados() {
       const arr = r.items || [];
       setItems(arr);
       setTotal(r.total ?? arr.length);
+
+      // Traer suggestion/usedQuery para el banner (ligero; ignora texto IA)
+      fetchAiMeta(texto);
     } catch (e) {
       setError(e?.message || "Error al buscar casos");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchAiMeta]);
 
-  // === Generar con IA ===
+  // === Generar con IA (texto largo) ===
   const generateAi = useCallback(async () => {
     const texto = q.trim();
     if (!texto) return;
@@ -222,15 +256,27 @@ export default function Resultados() {
     return "";
   }, [q, loading, error, items, aiResult]);
 
-  // Layout dinámico:
-  // - cuando hay aside IA: 2 columnas con proporción 3 / 1, gap pequeño
-  //   y aside con ancho fijo para no robarle demasiado a resultados
-  // - cuando NO hay aside IA: 1 columna, más angosto y centrado
+  // Layout dinámico
   const gridColsClass = showAsideIA
     ? "lg:grid-cols-[1fr_minmax(340px,380px)] lg:gap-4"
     : "lg:grid-cols-1 lg:gap-0";
 
   const maxWidthClass = showAsideIA ? "max-w-6xl" : "max-w-4xl";
+
+  // Handlers para el banner tipo Google
+  const handleUseSuggested = useCallback(() => {
+    if (!aiMeta?.usedQuery) return;
+    setQ(aiMeta.usedQuery);
+    navigate(`/resultados?q=${encodeURIComponent(aiMeta.usedQuery)}`, { replace: true });
+  }, [aiMeta, navigate]);
+
+  const handleForceOriginal = useCallback(async () => {
+    if (!aiMeta?.query) return;
+    // Refresca meta sin sugerencia (forzar original) y re-navega
+    await fetchAiMeta(aiMeta.query, { forzarOriginal: true });
+    setQ(aiMeta.query);
+    navigate(`/resultados?q=${encodeURIComponent(aiMeta.query)}`, { replace: true });
+  }, [aiMeta, fetchAiMeta, navigate]);
 
   return (
     <main className="min-h-screen w-full relative overflow-hidden text-white">
@@ -297,6 +343,20 @@ export default function Resultados() {
                 </div>
               )}
             </div>
+
+            {/* Banner tipo Google si backend sugirió otra query */}
+            {aiMeta?.usedQuery && aiMeta.usedQuery !== aiMeta.query && (
+              <div className="mb-3 text-sm text-slate-600">
+                Se muestran resultados de{" "}
+                <button className="underline" onClick={handleUseSuggested}>
+                  {aiMeta.usedQuery}
+                </button>
+                .{" "}
+                <button className="underline" onClick={handleForceOriginal}>
+                  Buscar, en cambio, {aiMeta.query}
+                </button>
+              </div>
+            )}
 
             {!!error && (
               <div className="text-red-700 bg-red-100 border border-red-300 rounded-md px-3 py-2 mb-3">
