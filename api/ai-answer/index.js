@@ -1,5 +1,4 @@
-// /api/ai-answer/index.js
-// SQL + sugerencia "¿quisiste decir…?" + Gemini + filtro SOLO SOPORTE (hard-stop) + guardrails en IA
+// /api/ai-answer/index.js  (SQL + sugerencia "¿quisiste decir…?" + Gemini + modo estricto + SOLO TI con fuzzy previo)
 
 const sql = require("mssql");
 const didYouMean = require("didyoumean2").default;
@@ -41,9 +40,8 @@ const MAX_CONTINUATIONS = 2;
 
 /* ------------------ Prompts ------------------ */
 const BASE_PROMPT_TI = `
-Eres un asistente especializado EXCLUSIVAMENTE en soporte técnico empresarial (TI).
-NO debes responder NADA que no sea sobre incidencias de TI (hardware, software, redes, accesos, contraseñas, VPN, correo, SAP, SQL/DBA, Azure, Windows/macOS, impresoras, permisos, etc.).
-Si detectas que la consulta no es TI, responde exactamente [[FILTERED_NON_TI]] y nada más.
+Eres un asistente especializado en soporte técnico empresarial.
+Objetivo: dar orientación clara, accionable y breve (listas de pasos) sobre incidencias, software, hardware, redes, accesos, contraseñas, VPN, correo, SAP, SQL/DBA, Azure, Windows/macOS, impresoras, permisos, etc.
 
 Formato EXACTO:
 1) <título corto>
@@ -62,19 +60,19 @@ Formato EXACTO:
 - paso 3
 
 Cierra SIEMPRE con [[END]].
-Español neutro. No inventes datos.
+No inventes datos. No incluyas disclaimers innecesarios. Español neutro.
 `.trim();
 
 const BASE_PROMPT_FLEX = `
-Eres un asistente EXCLUSIVO de TI. Si la consulta NO es de TI, responde exactamente [[FILTERED_NON_TI]].
-De lo contrario, responde en 4-6 líneas con guía práctica y, si aplica, sugiere el canal interno correcto. Cierra con [[END]].
+Eres un asistente técnico útil. Si la consulta es de TI, responde como soporte (pasos concretos).
+Si NO es de TI, devuelve exactamente [[FILTERED_NON_TI]].
+Cierra con [[END]].
 `.trim();
 
 function buildPrompt(q, looksLikeIT, strict) {
-  // Aunque ya filtramos antes, reforzamos el guardrail.
   if (strict && !looksLikeIT) {
     return `
-Eres un asistente SOLO de TI. La consulta no es de TI.
+Eres un asistente de soporte TI. La consulta no es de TI.
 Responde exactamente [[FILTERED_NON_TI]].
 Consulta: ${q}
 `.trim();
@@ -86,7 +84,7 @@ Consulta: ${q}
 }
 
 function buildContinuationPrompt(soFar) {
-  return `Continúa la respuesta anterior sin repetir texto. Mantén el mismo formato. Finaliza con [[END]].\nTexto previo:\n${soFar}`;
+  return `Continúa la respuesta anterior sin repetir texto. Mantén tono y formato. Finaliza con [[END]].\nTexto previo:\n${soFar}`;
 }
 
 /* ------------------ Utilidades ------------------ */
@@ -103,12 +101,19 @@ function extractText(data) {
   try {
     const parts = data?.candidates?.[0]?.content?.parts || [];
     return parts.map((p) => p?.text || "").join("\n");
-  } catch {
-    return "";
-  }
+  } catch { return ""; }
 }
 
-/* ------------------ Clasificador TI robusto ------------------ */
+/* ------------------ Clasificador TI + Fuzzy previo ------------------ */
+const SUPPORT_LEXICON = [
+  "correo","email","outlook","exchange","teams","zoom","sap","vpn","impresora","printer",
+  "windows","mac","azure","sql","server","servidor","database","base de datos","login",
+  "iniciar sesion","contraseña","contrasena","acceso","permiso","bloqueo","firewall",
+  "router","switch","red","driver","instalacion","configuracion","backup","restauracion",
+  "react","node","dotnet","c#","fastapi","office","licencia","ticket","incidencia","error",
+  "dba"
+];
+
 function isSupportRelated(qRaw) {
   const q = normalize(String(qRaw || ""));
   const include = [
@@ -122,6 +127,13 @@ function isSupportRelated(qRaw) {
   const identity = /\b(quien eres|que eres|quien te creo|que modelo eres|eres real)\b/;
   if (identity.test(q)) return false;
   return include.some((w) => q.includes(w));
+}
+
+// Corrección ligera SOLO para clasificar (no cambia la búsqueda ni la UI)
+function fuzzySupportForClassification(qRaw) {
+  const toks = normalize(String(qRaw || "")).split(/\s+/).filter(Boolean);
+  const fixed = toks.map(t => didYouMean(t, SUPPORT_LEXICON, { threshold: 0.6 }) || t);
+  return fixed.join(" ");
 }
 
 /* ------------------ Gemini API ------------------ */
@@ -147,9 +159,7 @@ async function listModels(key) {
     );
     const data = await res.json();
     return (data.models || []).map((m) => m.name);
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 }
 
 function orderCandidates(available) {
@@ -163,7 +173,7 @@ function orderCandidates(available) {
 
 async function askGeminiWithContinuation(q, looksLikeIT, strict) {
   const key = (process.env.GEMINI_API_KEY || "").trim();
-  if (!key) return `[[END]]`; // sin clave: salida controlada
+  if (!key) return `[[END]]`; // sin clave
 
   const available = await listModels(key);
   const candidates = orderCandidates(available);
@@ -173,33 +183,19 @@ async function askGeminiWithContinuation(q, looksLikeIT, strict) {
 
   for (const modelName of candidates) {
     try {
-      out = await callGemini({
-        apiKey: key,
-        modelName,
-        prompt: firstPrompt,
-        maxTokens: MAX_OUTPUT_TOKENS_FIRST,
-      });
+      out = await callGemini({ apiKey: key, modelName, prompt: firstPrompt, maxTokens: MAX_OUTPUT_TOKENS_FIRST });
       if (out) break;
     } catch {}
   }
 
-  // Si la IA devuelve el marcador de filtrado, no continúes
-  if (out && out.includes("[[FILTERED_NON_TI]]")) {
-    return "[[FILTERED_NON_TI]]";
-  }
+  if (out && out.includes("[[FILTERED_NON_TI]]")) return "[[FILTERED_NON_TI]]";
 
   for (let i = 0; i < MAX_CONTINUATIONS && !isComplete(out); i++) {
     const cont = buildContinuationPrompt(out);
     for (const modelName of candidates) {
       try {
-        const more = await callGemini({
-          apiKey: key,
-          modelName,
-          prompt: cont,
-          maxTokens: MAX_OUTPUT_TOKENS_CONT,
-        });
+        const more = await callGemini({ apiKey: key, modelName, prompt: cont, maxTokens: MAX_OUTPUT_TOKENS_CONT });
         if (more) {
-          // Si en continuación detecta no-TI, corta.
           if (more.includes("[[FILTERED_NON_TI]]")) return "[[FILTERED_NON_TI]]";
           out += "\n" + more;
           break;
@@ -212,6 +208,7 @@ async function askGeminiWithContinuation(q, looksLikeIT, strict) {
 }
 
 /* ------------------ Sugerencias tipo Google (didyoumean2) ------------------ */
+// Cache en memoria (proceso) para no rearmar el diccionario en cada request
 let __DICT_WORDS = null;
 let __DICT_PHRASES = null;
 
@@ -282,6 +279,7 @@ async function buildDictionary(pool) {
   return { words: __DICT_WORDS, phrases: __DICT_PHRASES };
 }
 
+// Devuelve una sugerencia por frase o por token (p. ej., "usuaroi" -> "usuario")
 function suggestQuery(q, words, phrases) {
   const qNorm = normalize(q).trim();
   if (!qNorm) return null;
@@ -319,38 +317,41 @@ module.exports = async function (context, req) {
     const body = req.body && typeof req.body === "object" ? req.body : {};
     const q = String(body.q || "").trim();
     const forceMode = String(body.mode || "").toLowerCase(); // "open" para forzar amplitud
-    const forceOriginal = !!body.forzarOriginal;
+    const forceOriginal = !!body.forzarOriginal; // si el front quiere usar la query original aunque haya sugerencia
 
     if (!q) {
       context.res = { status: 400, headers: cors(), body: { error: "Falta q" } };
       return;
     }
 
-    // 🔒 HARD-STOP: SOLO atender soporte técnico
-    if (!isSupportRelated(q)) {
+    const STRICT = String(process.env.STRICT_SUPPORT || "").toLowerCase() === "true";
+
+    // === Filtro SOLO TI con fuzzy previo para no bloquear "coreo" -> "correo" ===
+    const looksLikeITRaw = isSupportRelated(q);
+    const looksLikeITFuzzy = looksLikeITRaw ? true : isSupportRelated(fuzzySupportForClassification(q));
+    if (!looksLikeITFuzzy) {
       context.res = {
         status: 200,
         headers: cors(),
         body: {
           mode: "filtered",
           query: q,
-          // Mensaje neutral, sin "lo siento", y útil para guiar al usuario.
-          answer: "Solo atiendo consultas de soporte técnico (TI). Reformula tu pregunta con detalles técnicos (ej.: error, sistema, acceso, red, base de datos) para poder ayudarte.",
+          answer:
+            "Solo atiendo consultas de soporte técnico (TI). Reformula tu pregunta con detalles técnicos (ej.: error, sistema, acceso, red, base de datos) para poder ayudarte.",
         },
       };
       return;
     }
 
-    const STRICT = String(process.env.STRICT_SUPPORT || "").toLowerCase() === "true";
-    const looksLikeIT = true; // ya filtrado arriba
+    const looksLikeIT = true; // ya pasó el filtro TI (con fuzzy)
     const forceOpen = forceMode === "open";
 
-    // 1) Buscar en BD (con corrección NLP si no hay resultados)
+    // 1) Buscar en BD (solo si no forzamos modo abierto)
     if (!forceOpen) {
       try {
         const pool = await sql.connect(sqlConfig);
 
-        // BÚSQUEDA 1: query original
+        // --- BÚSQUEDA 1: con la query original
         let r = await pool
           .request()
           .input("q", sql.NVarChar, q)
@@ -362,7 +363,7 @@ module.exports = async function (context, req) {
         let suggestion = null;
         let usedQuery = q;
 
-        // BÚSQUEDA 2: sugerencia NLP (frase completa o tokens)
+        // Si no hay resultados, intentar sugerencia tipo Google (y reintentar)
         if (!forceOriginal && resultados.length === 0) {
           const { words, phrases } = await buildDictionary(pool);
           suggestion = suggestQuery(q, words, phrases);
@@ -396,8 +397,8 @@ module.exports = async function (context, req) {
             body: {
               mode: suggestion ? "db-suggested" : "db",
               query: q,
-              usedQuery,          // "Se muestran resultados de X"
-              suggestion,         // "Buscar, en cambio, q"
+              usedQuery,              // para que el front muestre "Se muestran resultados de X"
+              suggestion,             // para que el front ofrezca "Buscar, en cambio, q"
               casoSugeridoId: top.id,
               answer: `Encontré casos relacionados en la base de datos:\n\n${bullets}\n\nSugerencia principal: **${top.codigo} – ${top.titulo}**\nResumen: ${top.descripcion}\n[[END]]`,
             },
@@ -405,18 +406,17 @@ module.exports = async function (context, req) {
           return;
         }
 
-        // Sin resultados -> continuar a IA (sigue filtrado a TI)
+        // Si llegamos aquí, no hubo resultados ni con sugerencia -> seguimos a IA
       } catch (err) {
         context.log("SQL ERROR:", err?.message);
-        // Continúa a IA aunque la BD falle
+        // Continuamos hacia IA aunque la BD falle
       }
     }
 
-    // 2) IA (solo TI; si detecta no-TI, devuelve [[FILTERED_NON_TI]] y lo transformamos en mensaje neutral)
+    // 2) IA (flexible por defecto; estricto solo si STRICT_SUPPORT=true)
     let ai = await askGeminiWithContinuation(q, looksLikeIT, STRICT && !forceOpen);
 
     if (ai && ai.includes("[[FILTERED_NON_TI]]")) {
-      // Defensa extra (no debería ocurrir por el hard-stop inicial)
       context.res = {
         status: 200,
         headers: cors(),
@@ -430,7 +430,7 @@ module.exports = async function (context, req) {
       return;
     }
 
-    // Blindaje: si quedó vacío (p. ej., sin clave), da una guía mínima TI
+    // Blindaje: si quedó vacío (p.ej., sin clave), da una guía mínima
     const answer =
       (ai && ai.trim()) ||
       `1) Verifica datos de la incidencia
@@ -453,10 +453,10 @@ module.exports = async function (context, req) {
       status: 200,
       headers: cors(),
       body: {
-        mode: "ai-it",
+        mode: looksLikeIT ? "ai-it" : (STRICT && !forceOpen ? "ai-brief" : "ai-open"),
         query: q,
         answer,
-        debug: { ms: Date.now() - t0, STRICT, forceOpen },
+        debug: { ms: Date.now() - t0, looksLikeIT, STRICT, forceOpen },
       },
     };
   } catch (e) {
