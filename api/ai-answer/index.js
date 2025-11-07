@@ -111,7 +111,7 @@ const SUPPORT_LEXICON = [
   "iniciar sesion","contraseña","contrasena","acceso","permiso","bloqueo","firewall",
   "router","switch","red","driver","instalacion","configuracion","backup","restauracion",
   "react","node","dotnet","c#","fastapi","office","licencia","ticket","incidencia","error",
-  "dba"
+  "dba","usuario"
 ];
 
 function isSupportRelated(qRaw) {
@@ -122,7 +122,7 @@ function isSupportRelated(qRaw) {
     "credencial","acceso","bloqueo","permiso","react","fastapi","dotnet","c#","node",
     "red","vpn","instalacion","configuracion","driver","equipo","sistema","correo",
     "outlook","office","impresora","printer","licencia","sap","teams","zoom","windows",
-    "mac","firewall","router","switch","dba","backup","restauracion","contrasena","contraseña"
+    "mac","firewall","router","switch","dba","backup","restauracion","contrasena","contraseña","usuario"
   ];
   const identity = /\b(quien eres|que eres|quien te creo|que modelo eres|eres real)\b/;
   if (identity.test(q)) return false;
@@ -337,7 +337,7 @@ module.exports = async function (context, req) {
           mode: "filtered",
           query: q,
           answer:
-            "Solo atiendo consultas de soporte técnico (TI). Reformula tu pregunta con detalles técnicos (ej.: error, sistema, acceso, red, base de datos) para poder ayudarte.",
+            "Solo atiendo consultas de soporte técnico. Reformula tu pregunta con detalles técnicos para poder ayudarte.",
         },
       };
       return;
