@@ -1,4 +1,5 @@
-// /api/ai-answer/index.js  (SQL + sugerencia "¿quisiste decir…?" + Gemini + modo estricto opcional)
+// /api/ai-answer/index.js
+// SQL + sugerencia "¿quisiste decir…?" + Gemini + filtro SOLO SOPORTE (hard-stop) + guardrails en IA
 
 const sql = require("mssql");
 const didYouMean = require("didyoumean2").default;
@@ -40,8 +41,9 @@ const MAX_CONTINUATIONS = 2;
 
 /* ------------------ Prompts ------------------ */
 const BASE_PROMPT_TI = `
-Eres un asistente especializado en soporte técnico empresarial.
-Objetivo: dar orientación clara, accionable y breve (listas de pasos) sobre incidencias, software, hardware, redes, accesos, contraseñas, VPN, correo, SAP, SQL/DBA, Azure, Windows/macOS, impresoras, permisos, etc.
+Eres un asistente especializado EXCLUSIVAMENTE en soporte técnico empresarial (TI).
+NO debes responder NADA que no sea sobre incidencias de TI (hardware, software, redes, accesos, contraseñas, VPN, correo, SAP, SQL/DBA, Azure, Windows/macOS, impresoras, permisos, etc.).
+Si detectas que la consulta no es TI, responde exactamente [[FILTERED_NON_TI]] y nada más.
 
 Formato EXACTO:
 1) <título corto>
@@ -60,22 +62,20 @@ Formato EXACTO:
 - paso 3
 
 Cierra SIEMPRE con [[END]].
-No inventes datos. No incluyas disclaimers innecesarios. Español neutro.
+Español neutro. No inventes datos.
 `.trim();
 
 const BASE_PROMPT_FLEX = `
-Eres un asistente técnico útil. Si la consulta es de TI, responde como soporte (pasos concretos).
-Si NO es de TI, igualmente brinda una guía breve, responsable y práctica (en 4-6 líneas) y sugiere el canal correcto si aplica.
-Evita rechazar en seco. Español neutro. Usa el mismo formato de "3 alternativas" cuando tenga sentido.
-Cierra con [[END]].
+Eres un asistente EXCLUSIVO de TI. Si la consulta NO es de TI, responde exactamente [[FILTERED_NON_TI]].
+De lo contrario, responde en 4-6 líneas con guía práctica y, si aplica, sugiere el canal interno correcto. Cierra con [[END]].
 `.trim();
 
 function buildPrompt(q, looksLikeIT, strict) {
+  // Aunque ya filtramos antes, reforzamos el guardrail.
   if (strict && !looksLikeIT) {
     return `
-Eres un asistente de soporte TI. El usuario hizo una consulta no TI. 
-Responde en 5-7 líneas con orientación general breve y sugiere el área/canal correcto. 
-No digas "lo siento". Cierra con [[END]].
+Eres un asistente SOLO de TI. La consulta no es de TI.
+Responde exactamente [[FILTERED_NON_TI]].
 Consulta: ${q}
 `.trim();
   }
@@ -86,17 +86,13 @@ Consulta: ${q}
 }
 
 function buildContinuationPrompt(soFar) {
-  return `Continúa la respuesta anterior sin repetir texto. Mantén tono y formato. Finaliza con [[END]].\nTexto previo:\n${soFar}`;
+  return `Continúa la respuesta anterior sin repetir texto. Mantén el mismo formato. Finaliza con [[END]].\nTexto previo:\n${soFar}`;
 }
 
 /* ------------------ Utilidades ------------------ */
 function normalize(s = "") {
-  return s
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
-
 function isComplete(txt = "") {
   return /\n?\s*3\)\s/.test(txt) && /\[\[END\]\]\s*$/.test(txt);
 }
@@ -130,9 +126,7 @@ function isSupportRelated(qRaw) {
 
 /* ------------------ Gemini API ------------------ */
 async function callGemini({ apiKey, modelName, prompt, maxTokens }) {
-  const url = `https://generativelanguage.googleapis.com/v1/${modelName}:generateContent?key=${encodeURIComponent(
-    apiKey
-  )}`;
+  const url = `https://generativelanguage.googleapis.com/v1/${modelName}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const body = {
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: { temperature: TEMP, maxOutputTokens: maxTokens },
@@ -169,9 +163,7 @@ function orderCandidates(available) {
 
 async function askGeminiWithContinuation(q, looksLikeIT, strict) {
   const key = (process.env.GEMINI_API_KEY || "").trim();
-  if (!key) {
-    return `[[END]]`; // sin clave: salida vacía controlada
-  }
+  if (!key) return `[[END]]`; // sin clave: salida controlada
 
   const available = await listModels(key);
   const candidates = orderCandidates(available);
@@ -191,6 +183,11 @@ async function askGeminiWithContinuation(q, looksLikeIT, strict) {
     } catch {}
   }
 
+  // Si la IA devuelve el marcador de filtrado, no continúes
+  if (out && out.includes("[[FILTERED_NON_TI]]")) {
+    return "[[FILTERED_NON_TI]]";
+  }
+
   for (let i = 0; i < MAX_CONTINUATIONS && !isComplete(out); i++) {
     const cont = buildContinuationPrompt(out);
     for (const modelName of candidates) {
@@ -202,6 +199,8 @@ async function askGeminiWithContinuation(q, looksLikeIT, strict) {
           maxTokens: MAX_OUTPUT_TOKENS_CONT,
         });
         if (more) {
+          // Si en continuación detecta no-TI, corta.
+          if (more.includes("[[FILTERED_NON_TI]]")) return "[[FILTERED_NON_TI]]";
           out += "\n" + more;
           break;
         }
@@ -213,31 +212,22 @@ async function askGeminiWithContinuation(q, looksLikeIT, strict) {
 }
 
 /* ------------------ Sugerencias tipo Google (didyoumean2) ------------------ */
-// Cache en memoria (proceso) para no rearmar el diccionario en cada request
 let __DICT_WORDS = null;
 let __DICT_PHRASES = null;
 
-// Divide títulos en palabras normalizadas (>=3 chars)
 function tokenizeTitle(t) {
   return normalize(String(t || ""))
     .replace(/[^a-z0-9áéíóúñ\s]/gi, " ")
     .split(/\s+/)
     .filter((w) => w && w.length >= 3);
 }
+function unique(arr) { return Array.from(new Set(arr)); }
 
-function unique(arr) {
-  return Array.from(new Set(arr));
-}
-
-// Intenta armar diccionario desde BD:
-// 1) Primero intenta con el SP de búsqueda sin filtro (pageSize alto).
-// 2) Si no devuelve nada, intenta con tablas comunes (Casos/Caso) sin romper si no existen.
 async function buildDictionary(pool) {
   if (__DICT_WORDS && __DICT_PHRASES) return { words: __DICT_WORDS, phrases: __DICT_PHRASES };
 
   let titles = [];
   try {
-    // Intento 1: usar tu SP con q vacío (puede que devuelva algo)
     const r = await pool
       .request()
       .input("q", sql.NVarChar, "")
@@ -245,9 +235,7 @@ async function buildDictionary(pool) {
       .input("pageSize", sql.Int, 200)
       .execute("dbo.sp_caso_buscar_front");
     titles = (r.recordset || []).map((x) => x.titulo).filter(Boolean);
-  } catch (e) {
-    // Ignorar y probar SELECT directo
-  }
+  } catch {}
 
   if (!titles.length) {
     try {
@@ -273,7 +261,6 @@ async function buildDictionary(pool) {
     } catch {}
   }
 
-  // Si igual no hay, usa un “seed” mínimo para no romper:
   if (!titles.length) {
     titles = [
       "usuario bloqueado",
@@ -287,31 +274,21 @@ async function buildDictionary(pool) {
     ];
   }
 
-  const phrases = unique(
-    titles
-      .map((t) => t.toLowerCase().trim())
-      .filter((t) => t && t.length >= 3)
-  );
-
-  const words = unique(
-    titles.flatMap((t) => tokenizeTitle(t))
-  );
+  const phrases = unique(titles.map((t) => t.toLowerCase().trim()).filter((t) => t && t.length >= 3));
+  const words = unique(titles.flatMap((t) => tokenizeTitle(t)));
 
   __DICT_WORDS = words;
   __DICT_PHRASES = phrases;
   return { words: __DICT_WORDS, phrases: __DICT_PHRASES };
 }
 
-// Devuelve una sugerencia por frase o por token (p. ej., "usuaroi" -> "usuario")
 function suggestQuery(q, words, phrases) {
   const qNorm = normalize(q).trim();
   if (!qNorm) return null;
 
-  // 1) Probar sugerencia por frase completa
   const phrase = didYouMean(qNorm, phrases, { threshold: 0.6 });
   if (phrase && phrase !== qNorm) return phrase;
 
-  // 2) Probar sugerencia token por token
   const toks = qNorm.split(/\s+/).filter(Boolean);
   const fixed = toks.map((t) => didYouMean(t, words, { threshold: 0.6 }) || t);
   const candidate = fixed.join(" ");
@@ -320,7 +297,7 @@ function suggestQuery(q, words, phrases) {
   return null;
 }
 
-/* ------------------ Handler principal ------------------ */
+/* ------------------ CORS ------------------ */
 function cors() {
   return {
     "Content-Type": "application/json",
@@ -330,6 +307,7 @@ function cors() {
   };
 }
 
+/* ------------------ Handler principal ------------------ */
 module.exports = async function (context, req) {
   const t0 = Date.now();
   try {
@@ -341,23 +319,38 @@ module.exports = async function (context, req) {
     const body = req.body && typeof req.body === "object" ? req.body : {};
     const q = String(body.q || "").trim();
     const forceMode = String(body.mode || "").toLowerCase(); // "open" para forzar amplitud
-    const forceOriginal = !!body.forzarOriginal; // si el front quiere usar la query original aunque haya sugerencia
+    const forceOriginal = !!body.forzarOriginal;
 
     if (!q) {
       context.res = { status: 400, headers: cors(), body: { error: "Falta q" } };
       return;
     }
 
+    // 🔒 HARD-STOP: SOLO atender soporte técnico
+    if (!isSupportRelated(q)) {
+      context.res = {
+        status: 200,
+        headers: cors(),
+        body: {
+          mode: "filtered",
+          query: q,
+          // Mensaje neutral, sin "lo siento", y útil para guiar al usuario.
+          answer: "Solo atiendo consultas de soporte técnico (TI). Reformula tu pregunta con detalles técnicos (ej.: error, sistema, acceso, red, base de datos) para poder ayudarte.",
+        },
+      };
+      return;
+    }
+
     const STRICT = String(process.env.STRICT_SUPPORT || "").toLowerCase() === "true";
-    const looksLikeIT = isSupportRelated(q);
+    const looksLikeIT = true; // ya filtrado arriba
     const forceOpen = forceMode === "open";
 
-    // 1) Buscar en BD (solo si no forzamos modo abierto)
+    // 1) Buscar en BD (con corrección NLP si no hay resultados)
     if (!forceOpen) {
       try {
         const pool = await sql.connect(sqlConfig);
 
-        // --- BÚSQUEDA 1: con la query original
+        // BÚSQUEDA 1: query original
         let r = await pool
           .request()
           .input("q", sql.NVarChar, q)
@@ -369,7 +362,7 @@ module.exports = async function (context, req) {
         let suggestion = null;
         let usedQuery = q;
 
-        // Si no hay resultados, intentar sugerencia tipo Google (y reintentar)
+        // BÚSQUEDA 2: sugerencia NLP (frase completa o tokens)
         if (!forceOriginal && resultados.length === 0) {
           const { words, phrases } = await buildDictionary(pool);
           suggestion = suggestQuery(q, words, phrases);
@@ -403,8 +396,8 @@ module.exports = async function (context, req) {
             body: {
               mode: suggestion ? "db-suggested" : "db",
               query: q,
-              usedQuery,              // para que el front muestre "Se muestran resultados de X"
-              suggestion,             // para que el front ofrezca "Buscar, en cambio, q"
+              usedQuery,          // "Se muestran resultados de X"
+              suggestion,         // "Buscar, en cambio, q"
               casoSugeridoId: top.id,
               answer: `Encontré casos relacionados en la base de datos:\n\n${bullets}\n\nSugerencia principal: **${top.codigo} – ${top.titulo}**\nResumen: ${top.descripcion}\n[[END]]`,
             },
@@ -412,31 +405,58 @@ module.exports = async function (context, req) {
           return;
         }
 
-        // Si llegamos aquí, no hubo resultados ni con sugerencia -> seguimos a IA
+        // Sin resultados -> continuar a IA (sigue filtrado a TI)
       } catch (err) {
         context.log("SQL ERROR:", err?.message);
-        // Continuamos hacia IA aunque la BD falle
+        // Continúa a IA aunque la BD falle
       }
     }
 
-    // 2) IA (flexible por defecto; estricto solo si STRICT_SUPPORT=true)
-    const ai = await askGeminiWithContinuation(q, looksLikeIT, STRICT && !forceOpen);
+    // 2) IA (solo TI; si detecta no-TI, devuelve [[FILTERED_NON_TI]] y lo transformamos en mensaje neutral)
+    let ai = await askGeminiWithContinuation(q, looksLikeIT, STRICT && !forceOpen);
 
-    // Blindaje: si quedó vacío (p.ej., sin clave), da una guía mínima
+    if (ai && ai.includes("[[FILTERED_NON_TI]]")) {
+      // Defensa extra (no debería ocurrir por el hard-stop inicial)
+      context.res = {
+        status: 200,
+        headers: cors(),
+        body: {
+          mode: "filtered-ia",
+          query: q,
+          answer:
+            "Solo atiendo consultas de soporte técnico (TI). Por favor incluye el sistema afectado, mensaje de error y qué probaste hasta ahora.",
+        },
+      };
+      return;
+    }
+
+    // Blindaje: si quedó vacío (p. ej., sin clave), da una guía mínima TI
     const answer =
       (ai && ai.trim()) ||
-      (looksLikeIT
-        ? `1) Verifica datos de la incidencia\n- Reúne síntomas y mensajes de error\n- Identifica módulo/área afectada\n- Intenta reproducir el problema\n\n2) Accesos y dependencias\n- Valida credenciales/permisos\n- Revisa conectividad/VPN\n- Confirma versiones/instalación\n\n3) Escalamiento\n- Registra el ticket con evidencias\n- Asigna prioridad y responsable\n- Documenta solución y lecciones\n[[END]]`
-        : `1) Aclara el objetivo\n- Resume el contexto\n- Define el resultado esperado\n- Lista restricciones\n\n2) Primeros pasos prácticos\n- Identifica fuentes confiables\n- Compara 2–3 alternativas\n- Establece un checklist\n\n3) Siguiente acción\n- Documenta lo decidido\n- Establece un responsable\n- Define fecha de revisión\n[[END]]`);
+      `1) Verifica datos de la incidencia
+- Reúne síntomas y mensajes de error
+- Identifica módulo/área afectada
+- Intenta reproducir el problema
+
+2) Accesos y dependencias
+- Valida credenciales/permisos
+- Revisa conectividad/VPN
+- Confirma versiones/instalación
+
+3) Escalamiento
+- Registra el ticket con evidencias
+- Asigna prioridad y responsable
+- Documenta solución y lecciones
+[[END]]`;
 
     context.res = {
       status: 200,
       headers: cors(),
       body: {
-        mode: looksLikeIT ? "ai-it" : (STRICT && !forceOpen ? "ai-brief" : "ai-open"),
+        mode: "ai-it",
         query: q,
         answer,
-        debug: { ms: Date.now() - t0, looksLikeIT, STRICT, forceOpen },
+        debug: { ms: Date.now() - t0, STRICT, forceOpen },
       },
     };
   } catch (e) {
