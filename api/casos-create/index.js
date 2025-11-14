@@ -61,11 +61,10 @@ module.exports = async function (context, req) {
       return;
     }
 
-    // Para el SP: mandamos exactamente dd/MM/yyyy como NVARCHAR(10)
     const inicioFmt = inicioISO ? inicio_raw : null;
     const cierreFmt = cierreISO ? cierre_raw : null;
 
-    // Departamento: NET|SYS|PC|HW o null
+    // Departamento: NET|SYS|PC|HW
     const rawDept = (body.departamento ?? "").toString().toUpperCase().trim();
     const allowedDepts = new Set(["NET", "SYS", "PC", "HW"]);
     const departamento = allowedDepts.has(rawDept) ? rawDept : null;
@@ -77,7 +76,7 @@ module.exports = async function (context, req) {
 
     if (agente_raw) {
       if (/^\d+$/.test(agente_raw)) agente_id = parseInt(agente_raw, 10);
-      else agente_nombre = agente_raw; // venía como texto en 'agente'
+      else agente_nombre = agente_raw;
     }
 
     // ====== Validaciones ======
@@ -92,7 +91,6 @@ module.exports = async function (context, req) {
 
     const pool = await getPool();
 
-    // Si NO vino id pero SÍ nombre, resuélvelo a id
     if (!agente_id && agente_nombre) {
       const rsAg = await pool.request()
         .input("q", sql.NVarChar(200), agente_nombre)
@@ -151,7 +149,7 @@ module.exports = async function (context, req) {
         .input("numero_caso",  sql.VarChar(40),    numero_caso || null)
         .input("asunto",       sql.VarChar(200),   asunto)
         .input("descripcion",  sql.NVarChar(sql.MAX), descripcion)
-        .input("agente_id",    sql.Int,            agente_id) // <- puede ser null
+        .input("agente_id",    sql.Int,            agente_id) 
         .input("lob",          sql.NVarChar(100),  lob)
         .input("nivel",        sql.Int,            nivel)
         // ⬇⬇ MANDAR COMO NVARCHAR(10) dd/MM/yyyy PARA EL SP
@@ -178,7 +176,6 @@ module.exports = async function (context, req) {
         .input("agente_id",    sql.Int,            agente_id)
         .input("lob",          sql.NVarChar(100),  lob)
         .input("nivel",        sql.Int,            nivel)
-        // ⬇⬇ igual en fallback
         .input("fecha_inicio", sql.NVarChar(10),   inicioFmt || null)
         .input("fecha_cierre", sql.NVarChar(10),   cierreFmt || null)
         .input("solucion_txt", sql.NVarChar(sql.MAX), solucion)
@@ -192,7 +189,6 @@ module.exports = async function (context, req) {
     }
 
     // ====== Post-acciones ======
-    // A) Forzar departamento si vino en el body
     if (departamento) {
       await pool.request()
         .input("id",   sql.Int, id)
@@ -205,7 +201,6 @@ module.exports = async function (context, req) {
         `);
     }
 
-    // B) Asegurar solución y resuelto_por (si mandaste solución)
     if (solucion.trim().length > 0) {
       const solRs = await pool.request()
         .input("id", sql.Int, id)
@@ -236,7 +231,6 @@ module.exports = async function (context, req) {
     }
 
     // C) **Auditar creador del caso** (solo creado_por_id si existe)
-    //    Evitamos "Invalid column name" verificando con sys.columns.
     const chk = await pool.request()
       .input("tbl", sql.NVarChar(128), "dbo.caso")
       .input("col", sql.NVarChar(128), "creado_por_id")
@@ -267,7 +261,6 @@ module.exports = async function (context, req) {
         .query("SELECT numero_caso FROM dbo.caso WHERE id_caso = @id;");
       numero_caso_db = rsNum.recordset?.[0]?.numero_caso ?? null;
     } catch {
-      // no-op
     }
     const numero_caso_out = numero_caso_db || numero_caso || null;
 
