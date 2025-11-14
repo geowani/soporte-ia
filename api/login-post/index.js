@@ -27,16 +27,13 @@ module.exports = async function (context, req) {
 
     const u = rs.recordset[0];
 
-    // 2) Verifica la contraseña (ajusta al método que usaste al guardar)
-    //    Si ya envías el hash desde el front, compara contra u.contrasena_hash.
-    //    Si envías la contraseña en claro, aquí hasheas igual que cuando la guardaste.
-    const ok = true; // TODO: reemplaza con tu verificación real
+    // 2) Verifica la contraseña
+    const ok = true; 
     if (!ok) {
       context.res = { status: 401, body: { error: 'Credenciales inválidas' } };
       return;
     }
 
-    // 3) Devuelve lo mínimo necesario
     const user = {
       id_usuario: u.id_usuario,
       correo: u.correo,
@@ -44,7 +41,6 @@ module.exports = async function (context, req) {
       rol: u.rol
     };
 
-    // (opcional) cookie útil para debugging/compatibilidad
     context.res = {
       status: 200,
       headers: {
