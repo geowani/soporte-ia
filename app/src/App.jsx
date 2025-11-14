@@ -15,7 +15,6 @@ import AdminHistorial from "./pages/AdminHistorial";
 import SugerenciaExiste from "./pages/SugerenciaExiste";
 import EstadoCasoAgregado from "./pages/EstadoCasoAgregado";
 
-// utils de rol
 function normalizeRole(r) {
   return (r || "").toString().trim().toLowerCase();
 }
@@ -32,7 +31,6 @@ function getStoredUser() {
   }
 }
 function getStoredRole() {
-  // primero del objeto user, luego del fallback legacy userRole
   const u = getStoredUser();
   if (u && (u.rol || u.role)) return normalizeRole(u.rol || u.role);
   return normalizeRole(localStorage.getItem("userRole") || "user");
@@ -72,8 +70,6 @@ export default function App() {
 
     try {
       setLoading(true);
-
-      // Llamamos directo al backend nuevo
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -90,15 +86,11 @@ export default function App() {
       const roleNorm = normalizeRole(user.rol || user.role || "user");
       const isAdmin = isAdminRole(roleNorm);
 
-      // Guardar sesión “moderna”
       localStorage.setItem("logged", "1");
       localStorage.setItem("user", JSON.stringify({ ...user, rol: roleNorm, role: roleNorm, isAdmin }));
-      localStorage.setItem("agentId", String(user.id_usuario || "")); // útil para otras pantallas
-      // Fallbacks “legacy” (por compatibilidad con tu código previo)
+      localStorage.setItem("agentId", String(user.id_usuario || "")); 
       localStorage.setItem("userRole", roleNorm);
       localStorage.setItem("userEmail", user.correo || email);
-
-      // Cookies de cortesía (el servidor ya las setea, pero reforzamos en front)
       document.cookie = `agent_id=${user.id_usuario || ""}; Path=/; SameSite=Lax; Secure; Max-Age=2592000`;
       if (user.correo) {
         document.cookie = `user_email=${encodeURIComponent(user.correo)}; Path=/; SameSite=Lax; Secure; Max-Age=2592000`;
@@ -108,8 +100,6 @@ export default function App() {
       setType("success");
       setMsg("Inicio de sesión exitoso");
       setLogged(true);
-
-      // Redirección sugerida por backend o por rol
       const home = data.home || (isAdmin ? "/admin" : "/dashboard");
       navigate(home, { replace: true });
     } catch (err) {
