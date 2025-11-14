@@ -1,7 +1,4 @@
-/* app/src/index.css */
 @import "tailwindcss";
-
-/* opcional: tu fuente y resets */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
 
 html, body, #root { height: 100%; }
