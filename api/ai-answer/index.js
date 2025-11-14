@@ -1,5 +1,3 @@
-// /api/ai-answer/index.js  (SQL + sugerencia "¿quisiste decir…?" + Gemini + modo estricto + SOLO TI con fuzzy previo)
-
 const sql = require("mssql");
 const didYouMean = require("didyoumean2").default;
 
@@ -25,7 +23,6 @@ function parseConnStr(connStr = "") {
 }
 const sqlConfig = parseConnStr(process.env.SQL_CONN_STR || process.env.DB_CONN || "");
 
-/* ------------------ IA: Configuración ------------------ */
 const MODELS_PREFERRED = [
   "models/gemini-2.5-flash-latest",
   "models/gemini-2.5-pro-latest",
@@ -136,7 +133,6 @@ function fuzzySupportForClassification(qRaw) {
   return fixed.join(" ");
 }
 
-/* ------------------ Gemini API ------------------ */
 async function callGemini({ apiKey, modelName, prompt, maxTokens }) {
   const url = `https://generativelanguage.googleapis.com/v1/${modelName}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const body = {
@@ -208,7 +204,6 @@ async function askGeminiWithContinuation(q, looksLikeIT, strict) {
 }
 
 /* ------------------ Sugerencias tipo Google (didyoumean2) ------------------ */
-// Cache en memoria (proceso) para no rearmar el diccionario en cada request
 let __DICT_WORDS = null;
 let __DICT_PHRASES = null;
 
@@ -279,7 +274,6 @@ async function buildDictionary(pool) {
   return { words: __DICT_WORDS, phrases: __DICT_PHRASES };
 }
 
-// Devuelve una sugerencia por frase o por token (p. ej., "usuaroi" -> "usuario")
 function suggestQuery(q, words, phrases) {
   const qNorm = normalize(q).trim();
   if (!qNorm) return null;
@@ -316,8 +310,8 @@ module.exports = async function (context, req) {
 
     const body = req.body && typeof req.body === "object" ? req.body : {};
     const q = String(body.q || "").trim();
-    const forceMode = String(body.mode || "").toLowerCase(); // "open" para forzar amplitud
-    const forceOriginal = !!body.forzarOriginal; // si el front quiere usar la query original aunque haya sugerencia
+    const forceMode = String(body.mode || "").toLowerCase();
+    const forceOriginal = !!body.forzarOriginal;
 
     if (!q) {
       context.res = { status: 400, headers: cors(), body: { error: "Falta q" } };
@@ -337,7 +331,7 @@ module.exports = async function (context, req) {
           mode: "filtered",
           query: q,
           answer:
-            "Solo atiendo consultas de soporte técnico. Reformula tu pregunta con detalles técnicos para poder ayudarte.",
+            "Solo puedo responder a consultas de soporte técnico. Reformula tu pregunta con detalles técnicos para poder ayudarte.",
         },
       };
       return;
@@ -413,7 +407,6 @@ module.exports = async function (context, req) {
       }
     }
 
-    // 2) IA (flexible por defecto; estricto solo si STRICT_SUPPORT=true)
     let ai = await askGeminiWithContinuation(q, looksLikeIT, STRICT && !forceOpen);
 
     if (ai && ai.includes("[[FILTERED_NON_TI]]")) {
@@ -430,7 +423,6 @@ module.exports = async function (context, req) {
       return;
     }
 
-    // Blindaje: si quedó vacío (p.ej., sin clave), da una guía mínima
     const answer =
       (ai && ai.trim()) ||
       `1) Verifica datos de la incidencia
