@@ -1,7 +1,6 @@
 // /api/sugerencias/index.js
 const { getPool, sql } = require('../_db');
 
-// estados válidos (tu CHECK en SQL es pending/approved/rejected)
 function getAllowedStates() {
   const raw = process.env.SUG_ESTADOS || 'pending,approved,rejected';
   return raw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
@@ -16,7 +15,6 @@ function firstValidInt(list, min = 1) {
 }
 
 module.exports = async function (context, req) {
-  // CORS / preflight
   if (req.method === 'OPTIONS') {
     context.res = {
       status: 204,
@@ -45,13 +43,7 @@ module.exports = async function (context, req) {
       // dirección de orden
       const sort = String(req.query.sort || 'asc').toLowerCase(); // 'asc' | 'desc'
       const dir = (sort === 'desc') ? 'DESC' : 'ASC';             // default: ASC (viejo -> reciente)
-
-      // armamos el request para SQL
       const q = pool.request().input('top', sql.Int, top);
-
-      // vamos a construir las condiciones de forma más inteligente:
-      // 1) orGroup: condiciones amplias (term y/o fecha) que deben combinarse con OR entre sí
-      // 2) andConds: condiciones estrictas que siempre se aplican con AND (estado, agente)
       const orGroup = [];
       const andConds = [];
 
@@ -104,12 +96,10 @@ module.exports = async function (context, req) {
         where += ` AND (${orGroup.join(' OR ')})`;
       }
 
-      // luego agregamos los AND estrictos
       if (andConds.length > 0) {
         where += ' AND ' + andConds.join(' AND ');
       }
 
-      // query final
       const rs = await q.query(`
         SELECT TOP (@top)
           s.id_sugerencia               AS id,
@@ -153,7 +143,6 @@ module.exports = async function (context, req) {
     const numeroCasoNorm = numeroCasoRaw.replace(/\s+/g, '').toLowerCase();
 
     const cookieStr   = req.headers.cookie || '';
-    // FIX: regex correcto (sin dobles backslashes)
     const cookieAgent = (/(?:^|;\s*)agent_id=(\d+)/.exec(cookieStr) || [])[1];
     const headerAgent = req.headers['x-agent-id'];
     const headerEmail = String(req.headers['x-user-email'] || '').trim().toLowerCase();
@@ -192,7 +181,7 @@ module.exports = async function (context, req) {
       return;
     }
 
-    // 🔒 Chequeo de duplicado antes de insertar
+    // Chequeo de duplicado antes de insertar
     const dup = await pool.request()
       .input('n', sql.NVarChar(200), numeroCasoNorm)
       .query(`
