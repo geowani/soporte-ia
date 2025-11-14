@@ -1,11 +1,11 @@
 // api/login/index.js
 const sql = require('mssql');
 
-// Credenciales desde variables de entorno (configúralas en tu Function App)
+// Credenciales desde variables de entorno
 const config = {
   user: process.env.SQLUSER,
   password: process.env.SQLPASS,
-  server: process.env.SQLSERVER, // p.ej. genpactis.database.windows.net
+  server: process.env.SQLSERVER, // genpactis.database.windows.net
   database: process.env.SQLDB,
   options: { encrypt: true, trustServerCertificate: false }
 };
@@ -48,7 +48,7 @@ module.exports = async function (context, req) {
   try {
     const pool = await getPool();
 
-    // Valida credenciales con SHA2_256
+    // Valida credenciales
     const rs = await pool.request()
       .input('correo', sql.VarChar(256), emailRaw)
       .input('pwd',    sql.VarChar(200), passwordRaw)
@@ -81,13 +81,13 @@ module.exports = async function (context, req) {
       correo: u.correo,
       nombre_completo: u.nombre_completo,
       rol: roleNorm,     // mantiene clave 'rol'
-      role: roleNorm,    // alias útil
-      isAdmin            // boolean listo para usar
+      role: roleNorm,   
+      isAdmin            
     };
 
     const home = isAdmin ? '/admin' : '/dashboard';
 
-    // Cookies útiles para front/back (opcional)
+    // Cookies útiles para front/back
     const cookieAttrs = 'Path=/; SameSite=Lax; Secure; Max-Age=2592000'; // 30 días
     const cookies = [
       `agent_id=${user.id_usuario}; ${cookieAttrs}`,
@@ -100,9 +100,6 @@ module.exports = async function (context, req) {
       headers: {
         'Content-Type': 'application/json',
         'Set-Cookie': cookies
-        // Si necesitas CORS abierto, OJO con cookies:
-        // 'Access-Control-Allow-Origin': 'https://TU-ORIGEN',
-        // 'Access-Control-Allow-Credentials': 'true'
       },
       body: { ok: true, user, home }
     };
