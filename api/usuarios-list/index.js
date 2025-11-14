@@ -1,5 +1,4 @@
-// GET /api/usuarios-list   (opcional: ?q=texto)
-// Devuelve [{ id_usuario, nombre }] detectando dinámicamente la mejor columna de nombre.
+// GET /api/usuarios-list
 const { getPool, sql } = require("../_db");
 
 module.exports = async function (context, req) {
@@ -18,7 +17,7 @@ module.exports = async function (context, req) {
 
     const cols = meta.recordset.map(r => ({ name: r.col, typ: r.typ.toLowerCase() }));
 
-    // id: preferimos id_usuario; si no existe, tomamos la primera INT/NUMERIC/IDENTITY
+    // id:
     let idCol = cols.find(c => c.name.toLowerCase() === "id_usuario")?.name;
     if (!idCol) {
       idCol = cols.find(c => ["int","bigint","numeric","decimal"].includes(c.typ))?.name;
@@ -27,8 +26,6 @@ module.exports = async function (context, req) {
       throw new Error("No encuentro columna de id en dbo.usuario (ej. id_usuario).");
     }
 
-    // nombre: probamos candidatos más comunes; si ninguno existe,
-    // usamos la primera columna de tipo texto (nvarchar/varchar)
     const candidates = [
       "nombre", "nombre_completo", "usuario", "login",
       "email", "alias", "username", "display_name", "full_name"
@@ -41,7 +38,6 @@ module.exports = async function (context, req) {
       throw new Error("No encuentro columna de nombre en dbo.usuario.");
     }
 
-    // 2) Construir SQL según si viene filtro q
     const q = (req.query?.q || "").toString().trim();
     let sqlText = `
       SELECT TOP 100
