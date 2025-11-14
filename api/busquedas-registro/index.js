@@ -1,4 +1,3 @@
-// api/busquedas-registro/index.js
 const { getPool, sql } = require("../_db");
 
 function parseCookies(cookieHeader = "") {
@@ -16,12 +15,12 @@ function readUserId(req) {
 
   const candidates = [
     h["x-user-id"],
-    h["x-agent-id"],                 // <- nuevo
+    h["x-agent-id"],                 
     req?.body?.usuarioId,
-    req?.body?.agenteId,            // <- nuevo
-    req?.body?.user?.id_usuario,    // <- por si mandas el user
+    req?.body?.agenteId,          
+    req?.body?.user?.id_usuario,    
     req?.body?.user?.id,
-    cookies["agent_id"],            // <- cookie que ya pones en auth.js
+    cookies["agent_id"],        
   ];
 
   for (const v of candidates) {
