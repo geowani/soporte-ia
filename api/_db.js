@@ -37,16 +37,11 @@ function missingEnv() {
 
 let poolPromise;
 
-/**
- * Retorna un pool global (singleton). Usa:
- * - DB_CONN (connection string) si existe
- * - Caso contrario, variables sueltas
- */
 async function getPool() {
   // Si ya hay conexión en curso, reutiliza
   if (poolPromise) return poolPromise;
 
-  // A) Si hay DB_CONN, conecta con la cadena directa
+  // Si hay DB_CONN, conecta con la cadena directa
   if (process.env.DB_CONN) {
     const connStr = process.env.DB_CONN;
     poolPromise = sql.connect(connStr).catch(err => {
@@ -57,7 +52,7 @@ async function getPool() {
     return poolPromise;
   }
 
-  // B) Variables sueltas (valida requeridos)
+  // Variables sueltas (valida requeridos)
   const miss = missingEnv();
   if (miss) {
     throw new Error(
@@ -78,7 +73,7 @@ async function getPool() {
   return poolPromise;
 }
 
-/** Cierra el pool global (útil para reinicios calientes) */
+/** Cierra el pool global*/
 function disposePool() {
   try { sql.close(); } catch {}
   poolPromise = undefined;
