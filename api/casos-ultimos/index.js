@@ -9,7 +9,7 @@ function toLocalString(value) {
   if (value instanceof Date) {
     d = value;
   } else {
-    // Normaliza strings comunes: "YYYY-MM-DD HH:mm:ss" o ISO con Z
+    // Normaliza strings comunes: "YYYY-MM-DD HH:mm:ss"
     const s = String(value);
     const normalized = s.includes("T") ? s.replace("Z", "") : s.replace(" ", "T");
     d = new Date(normalized);
@@ -45,7 +45,7 @@ module.exports = async function (context, req) {
       titulo_pref:    r.titulo_pref,
       creado_por:     r.creado_por,
       fecha_creacion: r.fecha_creacion,          // se mantiene por compatibilidad
-      creado_en:      toLocalString(r.creado_en) // ⬅️ NUEVO: fecha de agregado al sistema
+      creado_en:      toLocalString(r.creado_en) // Fecha de agregado al sistema
     }));
 
     context.res = {
